@@ -23,6 +23,7 @@ PORT = 8765
 PAGES = {"/": "index.html", "/downloader": "downloader.html", "/converter": "converter.html", "/style.css": "style.css"}
 COOKIES = Path(__file__).parent / "cookies.txt"  # synced from Chrome by the extension; holds logins, keep private
 SETTINGS = Path(__file__).parent / "settings.json"
+EXTENSION_DIR = Path(__file__).parent / "extension"
 HOSTS = (f"127.0.0.1:{PORT}", f"localhost:{PORT}")
 ORIGINS = tuple(f"http://{h}" for h in HOSTS) + ("chrome-extension://",)
 EXTRACTORS = [ie for ie in gen_extractor_classes() if ie.ie_key() != "Generic"]
@@ -293,7 +294,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/state":
             with lock:  # copies: other threads keep updating these rows
                 state = {"sniffed": [dict(it) for it in sniffed], "jobs": dict(jobs), "out": settings["out"],
-                         "downloads": [dict(d) for d in sorted(downloads.values(), key=lambda d: -d["ts"])]}
+                         "downloads": [dict(d) for d in sorted(downloads.values(), key=lambda d: -d["ts"])],
+                         "extension_dir": str(EXTENSION_DIR)}
             self.reply(200, state)
         elif self.path.startswith("/thumb/") and (jpg := thumbs.get(self.path[7:])):
             self.reply(200, jpg, "image/jpeg")
@@ -314,6 +316,11 @@ class Handler(BaseHTTPRequestHandler):
             b = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
         except ValueError:
             return self.reply(400, {"ok": False, "error": "bad json"})
+        if self.path == "/setup":  # extension install help: shows the extension folder in Explorer
+            if b.get("open") != "folder" or os.name != "nt":
+                return self.reply(400, {"ok": False, "error": "open the folder yourself"})
+            os.startfile(EXTENSION_DIR)
+            return self.reply(200, {"ok": True})
         if self.path == "/cookies":
             if not (origin.startswith("chrome-extension://") and isinstance(b.get("cookies"), list)):
                 return self.reply(403, {"ok": False, "error": "extension only"})

@@ -24,6 +24,23 @@
     <ol id="downloads"></ol>
   </section>
 
+  <section class="setup" id="setup" hidden>
+    <h3>Add the browser extension</h3>
+    <p>It catches the videos playing in your other tabs and lets videos that need you signed in download.
+       Pasting links works without it.</p>
+    <div id="setup-steps">
+      <div class="step"><b>1</b><span>Open a new tab and go to</span>
+        <code id="ext-page"></code><button type="button" class="pick" id="copy-page">Copy</button>
+        <span>then switch on <strong>Developer mode</strong> (top right; on the left in Edge).</span></div>
+      <div class="step"><b>2</b><span>Click <strong>Load unpacked</strong>, paste this folder and choose <strong>Select Folder</strong>:</span>
+        <code id="ext-dir"></code><button type="button" class="pick" id="copy-ext">Copy</button>
+        <button type="button" class="link" id="show-ext">or show the folder</button></div>
+    </div>
+    <p id="setup-firefox" hidden>Firefox can't load this extension. Open Multitool in Chrome, Edge, Opera or Brave to use it.</p>
+    <p>This box goes away by itself once the extension is installed in this browser.
+       <button type="button" class="link" id="hide-setup">Not now</button></p>
+  </section>
+
   <h2>Caught in your tabs</h2>
   <ol id="list"></ol>
 
@@ -146,7 +163,10 @@
 
   function renderCaught(list) {
     if (!list.length) {
-      $("#list").innerHTML = '<li class="empty">Nothing yet. Load the extension, then play a video in any tab.</li>';
+      $("#list").innerHTML = '<li class="empty">Nothing yet. Play a video in any tab and it shows up here.'
+        + ' <button type="button" class="link" id="show-setup" hidden>Extension setup</button></li>';
+      $("#show-setup").onclick = () => setup(false);
+      showSetup();
       return;
     }
     $("#list").replaceChildren(...list.map((it, i) => {
@@ -160,10 +180,40 @@
     }));
   }
 
+  // Extension setup help, for the browser this page runs in. The extension marks the page (mark.js) when it's there.
+  const brand = [...(navigator.userAgentData?.brands || []).map((b) => b.brand), navigator.userAgent].join(" ");
+  const browser = /Firefox/.test(brand) ? null  // can't load Chrome extensions
+    : /Opera|OPR\//.test(brand) ? "opera" : /Edge|Edg\//.test(brand) ? "edge" : /Brave/.test(brand) ? "brave"
+    : /Vivaldi/.test(brand) ? "vivaldi" : "chrome";
+  if (browser) $("#ext-page").textContent = browser + "://extensions";
+  $("#setup-steps").hidden = !browser;
+  $("#setup-firefox").hidden = !!browser;
+  let setupHidden = false;
+  try { setupHidden = localStorage.getItem("hide-extension-setup") === "1"; } catch {}
+  function setup(hide) {
+    setupHidden = hide;
+    try { hide ? localStorage.setItem("hide-extension-setup", "1") : localStorage.removeItem("hide-extension-setup"); } catch {}
+    showSetup();
+  }
+  function showSetup() {  // the box while this browser lacks the extension; once put off, a link to bring it back
+    const missing = document.documentElement.dataset.multitool !== "installed";
+    $("#setup").hidden = setupHidden || !missing;
+    if ($("#show-setup")) $("#show-setup").hidden = !setupHidden || !missing;
+  }
+  $("#hide-setup").onclick = () => setup(true);
+  $("#show-ext").onclick = () => post("/setup", { open: "folder" }).catch(() => {});
+  const copier = (button, source) => async () => {
+    try { await navigator.clipboard.writeText($(source).textContent); button.textContent = "Copied"; } catch {}
+  };
+  $("#copy-page").onclick = copier($("#copy-page"), "#ext-page");
+  $("#copy-ext").onclick = copier($("#copy-ext"), "#ext-dir");
+
   async function poll() {
     try {
       const s = await (await fetch("/state")).json();
       jobs = s.jobs;
+      $("#ext-dir").textContent = s.extension_dir;
+      showSetup();
       if (!$("#pick").disabled) $("#out").textContent = s.out;
       const dl = JSON.stringify(s.downloads), caught = JSON.stringify(s.sniffed);
       if (dl !== lastDownloads) { lastDownloads = dl; renderDownloads(s.downloads); }

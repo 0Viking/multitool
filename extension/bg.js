@@ -56,3 +56,10 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
   syncTimer = setTimeout(syncCookies, 2000);
 });
 syncCookies(); // also on every service-worker wake
+
+// Multitool pages already open when the extension is installed get marked too (new ones get mark.js on load),
+// so the setup box closes right away.
+chrome.runtime.onInstalled.addListener(async () => {
+  for (const tab of await chrome.tabs.query({ url: ["http://127.0.0.1:8765/*", "http://localhost:8765/*"] }))
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["mark.js"] }).catch(() => {});
+});

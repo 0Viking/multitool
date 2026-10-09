@@ -48,11 +48,11 @@ Then open **http://127.0.0.1:8765** in your browser. Keep that PowerShell window
 
 ## The browser extension (for "Caught in your tabs")
 
-The downloader can list the videos playing in your other tabs, ready to grab. That part needs a small Chrome/Edge extension:
+The downloader can list the videos playing in your other tabs, ready to grab. That part needs a small extension for Chrome, Edge, Opera (GX), Brave or another Chromium browser; Firefox can't load it. Until it's installed in the browser you're using, the downloader page shows a setup box with these steps and Copy buttons for the address and folder:
 
-1. Open `chrome://extensions` (Edge: `edge://extensions`).
-2. Turn on **Developer mode** (top right).
-3. Click **Load unpacked** and choose the `extension` folder inside `multitool`.
+1. Open a new tab and go to your browser's extensions page: `chrome://extensions` (Edge: `edge://extensions`, Opera: `opera://extensions`, Brave: `brave://extensions`).
+2. Turn on **Developer mode** (top right; on the left in Edge).
+3. Click **Load unpacked** and choose the `extension` folder inside `multitool` (the box's **Copy** button gives you the path to paste).
 
 The extension also passes your logins for video sites (YouTube, Instagram, X…) to Multitool, so videos that need you signed in work too. Those stay in a `cookies.txt` file on your PC and are never uploaded.
 
