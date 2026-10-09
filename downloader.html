@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Downloader</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <a class="back" href="/">← Multitool</a>
+  <h1>Down<span>loader</span></h1>
+  <p class="tag">Any tab or link · best quality, always</p>
+
+  <form id="form">
+    <input id="url" type="url" required placeholder="Paste a YouTube / X / Instagram / TikTok link" aria-label="Video link" autofocus>
+    <button>Download</button>
+  </form>
+  <p class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></p>
+  <p class="status err" id="status"></p>
+
+  <section id="dl-section" hidden>
+    <h2 class="still">Downloads</h2>
+    <ol id="downloads"></ol>
+  </section>
+
+  <h2>Caught in your tabs</h2>
+  <ol id="list"></ol>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const views = {};  // download key -> its row's elements, for live progress
+  let jobs = {}, lastDownloads = "", lastCaught = "";  // jobs: live progress from the server
+  const ACTION = { busy: "Pause", paused: "Resume", error: "Retry" };
+
+  const size = (n) => {
+    if (n == null) return "?";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(i < 2 ? 0 : 1)} ${units[i]}`;
+  };
+  const clock = (t) => {
+    t = Math.round(t);
+    const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+  };
+  const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+
+  async function start(body) {
+    let r;
+    try { r = await (await post("/download", body)).json(); }
+    catch { r = { ok: false, error: "server offline — run python server.py" }; }
+    $("#status").textContent = r.ok ? "" : "✗ " + r.error;
+    poll();
+    return r.ok;
+  }
+
+  async function stop(key, action) {
+    await post("/stop", { key, action }).catch(() => {});
+    poll();
+  }
+
+  $("#form").onsubmit = async (e) => {
+    e.preventDefault();
+    const url = $("#url").value.trim();
+    if (await start({ key: url, url })) $("#url").value = "";
+  };
+
+  $("#pick").onclick = async () => {
+    const b = $("#pick");
+    b.disabled = true;
+    b.textContent = "Pick it in the window…";
+    try {
+      const r = await (await post("/folder", {})).json();
+      if (r.ok) $("#out").textContent = r.out;
+    } catch {}
+    b.disabled = false;
+    b.textContent = "Change";
+  };
+
+  // A list row: number, thumbnail with length/size badge, title, progress, status, buttons.
+  function row(it, i) {
+    const li = document.createElement("li");
+    li.innerHTML = '<b></b><span class="thumb"><img alt=""><i class="badge"></i></span>'
+      + '<div><div class="t"></div><progress max="1" hidden aria-label="Download progress"></progress><div class="status"></div></div>'
+      + '<div class="acts"><button class="go"></button><button class="x">✕</button></div>';
+    const name = it.title || it.url || it.page;
+    li.querySelector("b").textContent = String(i + 1).padStart(2, "0");
+    const img = li.querySelector("img");
+    img.referrerPolicy = "no-referrer"; // some CDNs refuse images hotlinked from another site
+    img.onerror = () => img.remove();
+    if (it.thumb) img.src = it.thumb; else img.remove();
+    li.querySelector(".badge").textContent = [it.duration && clock(it.duration), it.size && size(it.size)].filter(Boolean).join(" · ");
+    li.querySelector(".t").textContent = name;
+    li.querySelector(".t").title = it.page || it.url;
+    return { li, name, bar: li.querySelector("progress"), st: li.querySelector(".status"),
+             btn: li.querySelector(".go"), x: li.querySelector(".x") };
+  }
+
+  function paint(d) {
+    const v = views[d.key];
+    if (!v) return;
+    const p = (d.status === "busy" && jobs[d.key]) || d.prog;
+    v.btn.hidden = !ACTION[d.status];
+    v.btn.textContent = ACTION[d.status] || "";
+    v.btn.ariaLabel = `${v.btn.textContent}: ${v.name}`;
+    v.bar.hidden = !["busy", "paused"].includes(d.status);
+    if (p?.total) v.bar.value = Math.min(p.done / p.total, 1);
+    else v.bar.removeAttribute("value");
+    v.st.className = "status " + ({ busy: "live", done: "ok", error: "err" }[d.status] || "");
+    const sizes = p && `${size(p.done)} / ${size(p.total)}`;
+    v.st.textContent = d.status === "busy"
+      ? !p ? "starting…"
+        : p.part === "audio" && p.status === "finished" ? "merging video + audio…"
+        : [p.part, sizes, p.speed && size(p.speed) + "/s"].filter(Boolean).join(" · ")
+      : d.status === "paused" ? ["paused", sizes].filter(Boolean).join(" · ")
+      : (d.status === "done" ? "✓ " : "✗ ") + d.msg;
+    if (d.status === "done" && d.file) v.st.append(openLink(d.file));
+  }
+
+  // Explorer opens on the finished file: a web page can't open local folders itself.
+  function openLink(file) {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Open folder" });
+    b.onclick = async () => {
+      const r = await post("/open", { file }).catch(() => null);
+      if (!r?.ok) b.textContent = "file moved or deleted";
+    };
+    return b;
+  }
+
+  function renderDownloads(list) {
+    $("#dl-section").hidden = !list.length;
+    for (const k in views) delete views[k];
+    $("#downloads").replaceChildren(...list.map((d, i) => {
+      const r = row(d, i);
+      r.btn.onclick = () => (d.status === "busy" ? stop(d.key, "pause") : start({ key: d.key }));
+      r.x.onclick = () => stop(d.key, "cancel");
+      r.x.ariaLabel = r.x.title = d.status === "done" ? "Remove from the list (keeps the file)" : "Cancel and delete the partial file";
+      views[d.key] = r;
+      paint(d);
+      return r.li;
+    }));
+  }
+
+  function renderCaught(list) {
+    if (!list.length) {
+      $("#list").innerHTML = '<li class="empty">Nothing yet. Load the extension, then play a video in any tab.</li>';
+      return;
+    }
+    $("#list").replaceChildren(...list.map((it, i) => {
+      const r = row(it, i);
+      r.x.remove();
+      r.btn.textContent = "Get";
+      r.btn.ariaLabel = "Download: " + r.name;
+      r.btn.onclick = () => start({ key: it.key, page: it.page, media: it.media, title: it.title });
+      r.st.textContent = `${host(it.page)} · ${new Date(it.ts * 1000).toLocaleTimeString()}`;
+      return r.li;
+    }));
+  }
+
+  async function poll() {
+    try {
+      const s = await (await fetch("/state")).json();
+      jobs = s.jobs;
+      if (!$("#pick").disabled) $("#out").textContent = s.out;
+      const dl = JSON.stringify(s.downloads), caught = JSON.stringify(s.sniffed);
+      if (dl !== lastDownloads) { lastDownloads = dl; renderDownloads(s.downloads); }
+      if (caught !== lastCaught) { lastCaught = caught; renderCaught(s.sniffed); }
+      s.downloads.forEach((d) => d.status === "busy" && paint(d));
+    } catch {}
+  }
+  renderCaught([]); poll(); setInterval(poll, 1000);
+</script>
+</body>
+</html>

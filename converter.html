@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Converter</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <a class="back" href="/">← Multitool</a>
+  <h1>Con<span>verter</span></h1>
+  <p class="tag">Video · audio · images, to any format</p>
+
+  <label class="drop" id="drop">
+    <input type="file" id="files" multiple>
+    <strong>Drop files here</strong>
+    <span>or click to choose · several at once for a batch</span>
+  </label>
+  <p class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></p>
+  <p class="status err" id="status"></p>
+
+  <section id="files-section" hidden>
+    <h2 class="still">Files</h2>
+    <div class="batch" id="batch" hidden>
+      <span>All files</span>
+      <div class="chips" id="batch-chips"></div>
+      <button type="button" id="convert-all">Convert all</button>
+      <button type="button" class="x" id="clear-done">Clear finished</button>
+    </div>
+    <ol id="list"></ol>
+  </section>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const views = {}, chosen = {};  // job id -> its row's elements / the format picked for it
+  let jobs = [], progress = {}, lastJobs = "", jobRows = [], uploads = [];  // uploads: files still on their way up
+  const ACTION = { ready: "Convert", busy: "Pause", paused: "Continue", error: "Retry", done: "Convert" };
+  const LOCKED = ["queued", "busy", "paused"];
+
+  const size = (n) => {
+    if (n == null) return "?";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(i < 2 ? 0 : 1)} ${units[i]}`;
+  };
+  const clock = (t) => {
+    t = Math.round(t);
+    const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+  };
+  const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const act = (action, id) => post("/convert/" + action, { id }).catch(() => {}).then(poll);
+  const share = (p) => (p?.total && p.done != null ? Math.min(p.done / p.total, 1) : null);
+
+  // A list row: number, file-type block, name, details, format chips, progress, status, buttons.
+  function row(name, ext, kind) {
+    const li = document.createElement("li");
+    li.innerHTML = '<b></b><span class="kind"><span></span><small></small></span>'
+      + '<div><div class="t"></div><div class="info"></div><div class="chips" role="radiogroup"></div>'
+      + '<progress max="1" hidden aria-label="Progress"></progress><div class="status"></div></div>'
+      + '<div class="acts"><button class="go"></button><button class="x">✕</button></div>';
+    if (kind) li.querySelector(".kind").classList.add(kind);
+    li.querySelector(".kind span").textContent = ext.slice(0, 4);
+    li.querySelector(".kind small").textContent = kind;
+    li.querySelector(".t").textContent = name;
+    return { li, info: li.querySelector(".info"), chips: li.querySelector(".chips"), bar: li.querySelector("progress"),
+             st: li.querySelector(".status"), btn: li.querySelector(".go"), x: li.querySelector(".x") };
+  }
+
+  // Files reach the server as uploads: a web page can't hand it a real path.
+  function upload(file) {
+    const xhr = new XMLHttpRequest(), r = row(file.name, file.name.includes(".") ? file.name.split(".").pop() : "?", "");
+    const u = { li: r.li, aborted: false };
+    r.li.querySelector("b").textContent = "↑";
+    r.btn.remove();
+    r.bar.hidden = false;
+    r.st.className = "status live";
+    r.st.textContent = "uploading…";
+    r.x.ariaLabel = r.x.title = "Stop uploading";
+    r.x.onclick = () => { u.aborted = true; xhr.abort(); };
+    xhr.upload.onprogress = (e) => {
+      r.bar.value = e.loaded / e.total;
+      r.st.textContent = `uploading · ${size(e.loaded)} / ${size(e.total)}`;
+    };
+    xhr.onloadend = async () => {
+      if (xhr.status !== 200 && !u.aborted) $("#status").textContent = `✗ ${file.name}: upload failed`;
+      await poll();  // its row comes back from the server, then this one goes
+      uploads = uploads.filter((x) => x !== u);
+      draw();
+    };
+    xhr.open("POST", "/convert/upload");
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    xhr.send(file);
+    uploads.push(u);
+    draw();
+  }
+
+  function paint(j) {
+    const v = views[j.id];
+    if (!v) return;
+    const p = progress[j.id], f = share(p);
+    v.btn.textContent = ACTION[j.status] || "Convert";
+    v.btn.ariaLabel = `${v.btn.textContent}: ${j.name}`;
+    v.bar.hidden = !["busy", "paused"].includes(j.status);
+    if (f != null) v.bar.value = f;
+    else v.bar.removeAttribute("value");
+    v.st.className = "status " + ({ busy: "live", done: "ok", error: "err" }[j.status] || "");
+    v.st.textContent = j.status === "busy"
+      ? !p ? "starting…"
+        : [f != null && `${Math.floor(f * 100)}%`, f != null && `${clock(p.done)} / ${clock(p.total)}`,
+           p.speed && p.speed !== "N/A" && `${p.speed.trim()} speed`, p.size && size(p.size)].filter(Boolean).join(" · ") || "converting…"
+      : j.status === "paused" ? "paused" + (f != null ? ` · ${Math.floor(f * 100)}%` : "")
+      : j.status === "queued" ? "queued · waiting for a free slot"
+      : j.status === "done" ? "✓ " + j.msg
+      : j.status === "error" ? "✗ " + j.msg
+      : "pick a format, then Convert";
+    if (j.status === "done" && j.file) v.st.append(openLink(j.file));
+  }
+
+  // Explorer opens on the finished file: a web page can't open local folders itself.
+  function openLink(file) {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Open folder" });
+    b.onclick = async () => {
+      const r = await post("/open", { file }).catch(() => null);
+      if (!r?.ok) b.textContent = "file moved or deleted";
+    };
+    return b;
+  }
+
+  function jobRow(j, i) {
+    const r = row(j.name, j.ext || "?", j.kind || "");
+    const locked = LOCKED.includes(j.status), pick = (chosen[j.id] ??= j.target || j.targets[0]?.[0]);
+    r.li.querySelector("b").textContent = String(i + 1).padStart(2, "0");
+    r.info.textContent = `${j.info} · ${size(j.size)}`;
+    r.chips.ariaLabel = `Convert ${j.name} to`;
+    for (const [t, label] of j.targets) {
+      const l = document.createElement("label");
+      l.innerHTML = '<input type="radio"><span></span>';
+      const input = l.querySelector("input");
+      Object.assign(input, { name: "to-" + j.id, value: t, checked: t === pick, disabled: locked });
+      input.onchange = () => (chosen[j.id] = t);
+      l.querySelector("span").textContent = label.split(" · ")[0];  // the detail goes in the tooltip
+      l.title = label;
+      r.chips.append(l);
+    }
+    r.btn.hidden = !j.targets.length || j.status === "queued";
+    r.btn.onclick = () => (j.status === "busy" ? act("pause", j.id) : j.status === "paused" ? act("resume", j.id)
+      : post("/convert/start", { id: j.id, target: chosen[j.id] }).catch(() => {}).then(poll));
+    r.x.onclick = () => act("cancel", j.id);
+    r.x.ariaLabel = r.x.title = locked ? "Cancel and delete the partial file" : "Remove from the list (converted files stay)";
+    views[j.id] = r;
+    paint(j);
+    return r.li;
+  }
+
+  // Batch: one click sets a format on every file that can take it; Convert all queues them (2 run at a time).
+  function renderBatch() {
+    const formats = new Map();
+    jobs.forEach((j) => j.targets.forEach(([t, label]) => formats.has(t) || formats.set(t, label.split(" · ")[0])));
+    $("#batch").hidden = jobs.length < 2;
+    $("#batch-chips").replaceChildren(...[...formats].map(([t, label]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.title = `Set ${label} on every file that can take it`;
+      b.onclick = () => {
+        jobs.forEach((j) => !LOCKED.includes(j.status) && j.targets.some(([x]) => x === t) && (chosen[j.id] = t));
+        renderJobs();
+      };
+      return b;
+    }));
+  }
+
+  function renderJobs() {
+    for (const k in views) delete views[k];
+    jobRows = jobs.map(jobRow);
+    renderBatch();
+    draw();
+  }
+
+  function draw() {
+    $("#files-section").hidden = !(uploads.length || jobRows.length);
+    $("#list").replaceChildren(...uploads.map((u) => u.li), ...jobRows);
+  }
+
+  $("#convert-all").onclick = async () => {
+    for (const j of jobs)  // in list order, so the queue runs top to bottom
+      if ((j.status === "ready" || j.status === "error") && j.targets.length)
+        await post("/convert/start", { id: j.id, target: chosen[j.id] }).catch(() => {});
+    poll();
+  };
+  $("#clear-done").onclick = async () => {
+    for (const j of jobs) if (j.status === "done") await post("/convert/cancel", { id: j.id }).catch(() => {});
+    poll();
+  };
+
+  $("#pick").onclick = async () => {
+    const b = $("#pick");
+    b.disabled = true;
+    b.textContent = "Pick it in the window…";
+    try {
+      const r = await (await post("/folder", { which: "convert_out" })).json();
+      if (r.ok) $("#out").textContent = r.out;
+    } catch {}
+    b.disabled = false;
+    b.textContent = "Change";
+  };
+
+  const drop = $("#drop");  // the whole page takes drops; the box lights up
+  addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  addEventListener("dragleave", (e) => { if (!e.relatedTarget) drop.classList.remove("over"); });
+  addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    [...e.dataTransfer.files].forEach(upload);
+  });
+  $("#files").onchange = (e) => { [...e.target.files].forEach(upload); e.target.value = ""; };
+
+  async function poll() {
+    try {
+      const s = await (await fetch("/convert/state")).json();
+      progress = s.progress;
+      if (!$("#pick").disabled) $("#out").textContent = s.out;
+      const js = JSON.stringify(s.jobs);
+      if (js !== lastJobs) { lastJobs = js; jobs = s.jobs; renderJobs(); }
+      jobs.forEach((j) => ["busy", "paused"].includes(j.status) && paint(j));
+    } catch {}
+  }
+  poll(); setInterval(poll, 1000);
+</script>
+</body>
+</html>
