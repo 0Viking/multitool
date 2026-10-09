@@ -3,7 +3,9 @@
 A couple of handy tools that run on your own PC and open in your browser.
 
 - **Video downloader**: paste a link from YouTube, X, Instagram, TikTok or [hundreds of other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), or grab videos playing in your other tabs. Always the best quality, with a progress bar, pause/resume, retry and multi-connection speed.
-- **Universal converter**: drop video, audio or image files and turn them into other formats, one at a time or in batches.
+- **Universal converter**: drop video, audio or image files and turn them into other formats, one at a time or in batches. It also converts tables between CSV, TSV and JSON, and pulls the text out of PDFs.
+- **Video editor**: crop, resize, trim on a filmstrip, change the canvas shape, move / resize / rotate the video on the canvas by dragging it, mirror and mute, with undo (Ctrl+Z).
+- **Compressor & resizer**: shrink videos, images and GIFs to a size goal (e.g. under 10 MB) or a % of the original, resize and crop them, with undo.
 
 Everything runs locally. Nothing is uploaded anywhere, and your logins never leave your computer.
 
@@ -21,10 +23,10 @@ winget install Git.Git
 
 ffmpeg does the converting, Node.js is needed for YouTube, aria2 makes downloads faster (optional), and Git lets you grab updates easily.
 
-**2. Close PowerShell and open a new one** so it finds the new programs, then install the downloader engine:
+**2. Close PowerShell and open a new one** so it finds the new programs, then install the downloader engine and the PDF reader:
 
 ```powershell
-py -m pip install -U "yt-dlp[default]"
+py -m pip install -U "yt-dlp[default]" pypdf
 ```
 
 **3. Get Multitool:**
@@ -81,6 +83,6 @@ YouTube changes things every few weeks. If downloads suddenly fail, updating yt-
 | File | What it does |
 |---|---|
 | `server.py` | The local server: pages, downloads (yt-dlp), video previews |
-| `convert.py` | The converter (ffmpeg) |
-| `index.html`, `downloader.html`, `converter.html`, `style.css` | The pages |
+| `convert.py` | The converter, editor and compressor exports (ffmpeg for media; Python for tables and PDFs) |
+| `index.html`, `downloader.html`, `converter.html`, `studio.html`, `style.css` | The pages (`studio.html` is both the editor and the compressor) |
 | `extension/` | The browser extension |

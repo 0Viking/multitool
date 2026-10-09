@@ -10,7 +10,7 @@
 <body>
   <a class="back" href="/">← Multitool</a>
   <h1>Con<span>verter</span></h1>
-  <p class="tag">Video · audio · images, to any format</p>
+  <p class="tag">Video · audio · images · tables · PDF text</p>
 
   <label class="drop" id="drop">
     <input type="file" id="files" multiple>
@@ -91,6 +91,7 @@
       draw();
     };
     xhr.open("POST", "/convert/upload");
+    xhr.setRequestHeader("X-Tool", "converter");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
     xhr.send(file);
@@ -108,13 +109,16 @@
     if (f != null) v.bar.value = f;
     else v.bar.removeAttribute("value");
     v.st.className = "status " + ({ busy: "live", done: "ok", error: "err" }[j.status] || "");
+    const pct = f != null && `${Math.floor(f * 100)}%`;
     v.st.textContent = j.status === "busy"
       ? !p ? "starting…"
-        : [f != null && `${Math.floor(f * 100)}%`, f != null && `${clock(p.done)} / ${clock(p.total)}`,
+        : p.unit === "pages" ? `${pct} · page ${p.done} of ${p.total}`
+        : p.unit === "rows" ? `${pct} · ${p.done.toLocaleString()} rows`  // the total is an estimate (lines)
+        : [pct, f != null && `${clock(p.done)} / ${clock(p.total)}`,
            p.speed && p.speed !== "N/A" && `${p.speed.trim()} speed`, p.size && size(p.size)].filter(Boolean).join(" · ") || "converting…"
       : j.status === "paused" ? "paused" + (f != null ? ` · ${Math.floor(f * 100)}%` : "")
       : j.status === "queued" ? "queued · waiting for a free slot"
-      : j.status === "done" ? "✓ " + j.msg
+      : j.status === "done" ? "✓ " + j.msg + (j.note ? " — " + j.note : "")
       : j.status === "error" ? "✗ " + j.msg
       : "pick a format, then Convert";
     if (j.status === "done" && j.file) v.st.append(openLink(j.file));
@@ -221,7 +225,7 @@
 
   async function poll() {
     try {
-      const s = await (await fetch("/convert/state")).json();
+      const s = await (await fetch("/convert/state?tool=converter")).json();
       progress = s.progress;
       if (!$("#pick").disabled) $("#out").textContent = s.out;
       const js = JSON.stringify(s.jobs);

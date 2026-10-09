@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Editor</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <a class="back" href="/">← Multitool</a>
+  <h1 id="title">Edit<span>or</span></h1>
+  <p class="tag" id="tagline"></p>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file">
+    <strong>Drop a file here</strong>
+    <span id="hint"></span>
+  </label>
+  <p class="status err" id="load-error"></p>
+
+  <section class="studio" id="studio" hidden>
+    <div class="chips modes" id="modes" data-mode="editor" role="group" aria-label="Dragging on the picture">
+      <button type="button" data-t="move">✥ Move, resize &amp; rotate</button>
+      <button type="button" data-t="crop">⬚ Crop</button>
+    </div>
+    <div class="preview" id="preview">
+      <div class="stage" id="stage">
+        <div class="view" id="view">
+          <div class="box" id="box" hidden><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+        </div>
+      </div>
+      <div class="sel" id="sel" hidden>
+        <i data-s="nw"></i><i data-s="ne"></i><i data-s="sw"></i><i data-s="se"></i>
+        <b class="spin" title="Drag to rotate · Shift: 15° steps"></b>
+      </div>
+    </div>
+    <div class="timeline" id="timeline" data-kind="video">
+      <canvas class="strip" id="strip" aria-hidden="true"></canvas>
+      <div class="cut" id="cut-l"></div><div class="cut" id="cut-r"></div>
+      <div class="range" id="range" data-mode="editor">
+        <span class="handle" id="h-start" role="slider" tabindex="0" aria-label="Trim start"></span>
+        <span class="handle" id="h-end" role="slider" tabindex="0" aria-label="Trim end"></span>
+      </div>
+      <div class="playhead" id="playhead"></div>
+    </div>
+    <div class="transport" data-kind="video">
+      <button type="button" class="pick" id="play">Play</button>
+      <span class="time" id="time"></span>
+      <span class="time" id="trim-info" data-mode="editor"></span>
+    </div>
+    <p class="readout" id="readout"></p>
+
+    <div class="panels">
+      <fieldset class="group">
+        <legend>Crop</legend>
+        <p class="hint">In Crop mode, drag on the picture to draw a box, or type the numbers.</p>
+        <div class="chips" id="ratios" role="group" aria-label="Crop shape">
+          <button type="button" data-r="">Free</button><button type="button" data-r="1:1">1:1</button>
+          <button type="button" data-r="16:9">16:9</button><button type="button" data-r="9:16">9:16</button>
+          <button type="button" data-r="4:3">4:3</button><button type="button" data-r="4:5">4:5</button>
+        </div>
+        <div class="fields">
+          <label>W <input type="number" id="cw" min="2"></label><label>H <input type="number" id="ch" min="2"></label>
+          <label>X <input type="number" id="cx" min="0"></label><label>Y <input type="number" id="cy" min="0"></label>
+        </div>
+        <div class="acts">
+          <button type="button" class="pick" id="crop-apply" disabled>Apply</button>
+          <button type="button" class="pick" id="crop-clear" disabled>Clear</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend id="resize-legend">Resize</legend>
+        <div class="fields">
+          <label>W <input type="number" id="rw" min="2"></label><label>H <input type="number" id="rh" min="2"></label>
+          <label><input type="number" id="rp" min="1" max="400"> %</label>
+        </div>
+        <label class="check"><input type="checkbox" id="lock" checked> keep the shape</label>
+      </fieldset>
+
+      <fieldset class="group" data-mode="editor">
+        <legend>Canvas</legend>
+        <div class="chips" id="canvas" role="group" aria-label="Canvas shape">
+          <button type="button" data-c="">Original</button><button type="button" data-c="16:9">16:9</button>
+          <button type="button" data-c="9:16">9:16</button><button type="button" data-c="1:1">1:1</button>
+          <button type="button" data-c="4:3">4:3</button><button type="button" data-c="4:5">4:5</button>
+        </div>
+        <div class="chips">
+          <button type="button" id="fit">Fit</button><button type="button" id="fill">Fill</button>
+          <button type="button" id="rot-l" aria-label="Rotate left 90 degrees">⟲ 90°</button>
+          <button type="button" id="rot-r" aria-label="Rotate right 90 degrees">⟳ 90°</button>
+        </div>
+        <div class="fields"><label>Angle <input type="number" id="angle" step="1"> °</label></div>
+        <p class="hint">Drag the video to move it, a corner to resize it, the dot above it to rotate it.
+          Sideways phone video: ⟳ 90° and 9:16.</p>
+      </fieldset>
+
+      <fieldset class="group" data-mode="editor">
+        <legend>Mirror &amp; sound</legend>
+        <div class="chips">
+          <button type="button" id="flip-h">↔ Mirror</button><button type="button" id="flip-v">↕ Upside down</button>
+          <button type="button" id="sound" data-kind="video">Sound on</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="group" data-mode="compressor">
+        <legend>Compress</legend>
+        <div class="chips" id="goal-mode" role="group" aria-label="Compression">
+          <button type="button" data-g="">Off</button><button type="button" data-g="mb">Size goal</button>
+          <button type="button" data-g="pct">% of the original</button>
+        </div>
+        <div class="fields" id="goal-field" hidden>
+          <label><input type="number" id="goal" min="0.01" step="any"> <span id="goal-unit">MB</span></label>
+        </div>
+        <div class="chips" id="formats" data-kind="image" role="group" aria-label="Format">
+          <button type="button" data-f="">Same format</button><button type="button" data-f="jpg">JPG</button>
+          <button type="button" data-f="webp">WebP</button><button type="button" data-f="png">PNG</button>
+        </div>
+        <p class="hint" id="goal-info"></p>
+      </fieldset>
+    </div>
+
+    <div class="history">
+      <button type="button" class="pick" id="undo">Undo</button>
+      <button type="button" class="pick" id="redo">Redo</button>
+      <button type="button" class="pick" id="revert">Revert</button>
+      <span class="hint">Ctrl+Z · Ctrl+Y</span>
+    </div>
+
+    <div class="exportbar">
+      <p class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></p>
+      <div class="acts">
+        <button type="button" id="export" disabled>Export</button>
+        <button type="button" class="alt" id="pause" hidden>Pause</button>
+        <button type="button" class="x" id="stop" hidden aria-label="Cancel the export">✕</button>
+      </div>
+      <progress id="bar" max="1" hidden aria-label="Progress"></progress>
+      <p class="status" id="status"></p>
+    </div>
+  </section>
+
+<script>
+  // One page, two tools: /editor and /compressor share the preview, crop box, undo history and export.
+  // In the editor the video always sits on a canvas ("Original" = the video's own shape), where it can be moved,
+  // resized and rotated; Crop mode shows the plain video instead, so the crop box is never drawn on a tilted picture.
+  const MODE = location.pathname.startsWith("/compressor") ? "compressor" : "editor";
+  const home = MODE === "editor" ? "move" : "crop";  // what dragging on the picture does at first
+  const $ = (s) => document.querySelector(s);
+  const RATIOS = { "1:1": 1, "16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "4:5": 4 / 5 };
+  const blank = () => ({ crop: null, size: null, canvas: null, place: null, rotate: 0, flipH: false, flipV: false, mute: false, trim: null, goal: null, format: null });
+  let file = null, kind = "", media = null, natW = 0, natH = 0, duration = 0, k = 1, ks = 1;
+  let jobId = null, job = null, progress = {}, xhr = null, uploaded = null, note = "";
+  let history = [blank()], pos = 0, tool = home, draft = null, drag = null, cropRatio = "";
+  let grab = null, livePlace = null, liveTurn = null;  // a move / resize / rotate in progress (one undo step when it ends)
+  const cur = () => history[pos];
+  const frame = () => cur().crop || { x: 0, y: 0, w: natW, h: natH };  // the part of the picture still in
+  const composing = () => MODE === "editor" && tool === "move";  // showing the canvas (else the plain picture, for cropping)
+  const even = (n) => (kind === "video" ? Math.max(2, Math.round(n / 2) * 2) : Math.max(1, Math.round(n)));  // H.264 wants even sizes
+
+  const size = (n) => {
+    if (n == null) return "?";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(i < 2 ? 0 : 1)} ${units[i]}`;
+  };
+  const clock = (t) => {
+    t = Math.round(t);
+    const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+  };
+  const stamp = (t) => `${clock(Math.floor(t))}.${Math.floor((t % 1) * 10)}`;
+  const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+  document.title = MODE === "editor" ? "Editor" : "Compressor";
+  $("#title").innerHTML = MODE === "editor" ? "Edit<span>or</span>" : "Compress<span>or</span>";
+  $("#tagline").textContent = MODE === "editor" ? "Crop · resize · trim · canvas · rotate · mirror · sound" : "Shrink, resize and crop videos, images and GIFs";
+  $("#hint").textContent = MODE === "editor" ? "or click to choose a video" : "or click to choose a video, image or GIF";
+  $("#file").accept = MODE === "editor" ? "video/*,.mkv,.avi" : "video/*,image/*,.mkv,.avi";
+  if (MODE === "editor") $("#resize-legend").textContent = "Output size";
+
+  function showFor() {  // only the panels for this tool and this kind of file
+    document.querySelectorAll("[data-mode],[data-kind]").forEach((el) => {
+      el.hidden = (el.dataset.mode && el.dataset.mode !== MODE) || (el.dataset.kind && el.dataset.kind !== kind);
+    });
+  }
+
+  // ---- Loading: the browser previews the file right away while it uploads for the export ----
+  function load(f) {
+    if (xhr) xhr.abort();
+    if (jobId) post("/convert/cancel", { id: jobId }).catch(() => {});  // the previous file's upload goes
+    if (media) { URL.revokeObjectURL(media.src); media.remove(); media = null; }
+    $("#studio").hidden = true;
+    $("#load-error").textContent = "";
+    const image = f.type.startsWith("image/");
+    if (MODE === "editor" && image) {
+      $("#load-error").textContent = "✗ The editor takes videos. Images and GIFs go in the Compressor.";
+      return;
+    }
+    file = f; jobId = null; job = null; draft = null; note = ""; history = [blank()]; pos = 0; cropRatio = ""; tool = home;
+    kind = image ? (f.type === "image/gif" ? "gif" : "image") : "video";
+    media = document.createElement(image ? "img" : "video");
+    media.className = "media";
+    media.draggable = false;
+    media.addEventListener(image ? "load" : "loadedmetadata", () => {
+      natW = media.naturalWidth || media.videoWidth;
+      natH = media.naturalHeight || media.videoHeight;
+      duration = media.duration || 0;
+      $("#studio").hidden = false;
+      drop.classList.add("compact");  // out of the way while working; still takes the next file
+      $("#drop strong").textContent = "Drop another file";
+      showFor();
+      render();
+      if (!image) filmstrip();
+    }, { once: true });
+    media.addEventListener("error", () => {
+      $("#load-error").textContent = `✗ This browser can't show ${f.name}. Convert it to MP4 (or PNG) in the Converter first.`;
+      $("#studio").hidden = true;
+    }, { once: true });
+    if (!image) {
+      media.preload = "auto";
+      media.playsInline = true;
+      for (const ev of ["timeupdate", "play", "pause"]) media.addEventListener(ev, tick);
+    }
+    media.src = URL.createObjectURL(f);
+    $("#view").prepend(media);
+    upload(f);
+  }
+
+  function upload(f) {  // a web page can't hand the server a real path, so the file goes up
+    const me = (xhr = new XMLHttpRequest());
+    uploaded = 0;
+    me.upload.onprogress = (e) => {
+      if (me !== xhr) return;
+      uploaded = e.loaded / e.total;
+      note = `uploading · ${size(e.loaded)} / ${size(e.total)}`;
+      renderExport();
+    };
+    me.onload = () => {
+      if (me !== xhr) return;
+      uploaded = null;
+      const r = JSON.parse(me.responseText || "{}");
+      if (!r.ok) { note = "✗ upload failed"; return renderExport(); }
+      jobId = r.id;
+      note = "ready to export";
+      if (kind === "gif" && r.kind === "image") { kind = "image"; showFor(); }  // a one-frame GIF is a still image
+      render();
+    };
+    me.onerror = () => { if (me === xhr) { uploaded = null; note = "✗ upload failed: is the server running?"; renderExport(); } };
+    me.open("POST", "/convert/upload");
+    me.setRequestHeader("Content-Type", "application/octet-stream");
+    me.setRequestHeader("X-Filename", encodeURIComponent(f.name));
+    me.setRequestHeader("X-Tool", MODE);
+    me.send(f);
+  }
+
+  // ---- The canvas: its size, and where the picture sits on it (canvas pixels) ----
+  function canvasDims() {  // the picture's own shape, or the chosen shape at the picture's short side (like the export)
+    const r = cur(), c = frame(), up = (n) => Math.ceil(n / 2) * 2;
+    if (!r.canvas) return kind === "video" ? [up(c.w), up(c.h)] : [c.w, c.h];
+    const [a, b] = r.canvas.split(":").map(Number), s = Math.min(c.w, c.h);
+    return a >= b ? [up((s * a) / b), up(s)] : [up(s), up((s * b) / a)];
+  }
+  function fitPlace(fill) {  // centered, as big as fits (Fit) or just covering the canvas (Fill), counting the rotation
+    const c = frame(), [cw, ch] = canvasDims(), t = (cur().rotate * Math.PI) / 180;
+    const bw = Math.abs(c.w * Math.cos(t)) + Math.abs(c.h * Math.sin(t)), bh = Math.abs(c.w * Math.sin(t)) + Math.abs(c.h * Math.cos(t));
+    const s = (fill ? Math.max : Math.min)(cw / bw, ch / bh), w = even(c.w * s), h = even(c.h * s);
+    return { x: Math.round((cw - w) / 2), y: Math.round((ch - h) / 2), w, h };
+  }
+  const placement = () => livePlace || cur().place || fitPlace(false);  // fitted until moved or resized
+  const turn = () => (liveTurn ?? cur().rotate) || 0;
+
+  // ---- Preview: everything shown live with CSS; only Export runs ffmpeg ----
+  function layout() {
+    const c = frame(), show = composing(), pv = $("#preview"), stage = $("#stage"), sel = $("#sel");
+    const [cw, ch] = show ? canvasDims() : [c.w, c.h];
+    const p = show ? placement() : { x: 0, y: 0, w: c.w, h: c.h }, deg = show ? turn() : 0;
+    const maxW = pv.clientWidth - 48, maxH = Math.max(220, innerHeight * 0.58);
+    let sw = maxW, sh = (sw * ch) / cw;
+    if (sh > maxH) { sh = maxH; sw = (sh * cw) / ch; }
+    ks = sw / cw;  // screen pixels per canvas pixel
+    Object.assign(stage.style, { width: sw + "px", height: sh + "px" });
+    const box = { left: p.x * ks + "px", top: p.y * ks + "px", width: p.w * ks + "px", height: p.h * ks + "px", transform: `rotate(${deg}deg)` };
+    Object.assign($("#view").style, box);
+    k = (p.w * ks) / c.w;  // screen pixels per picture pixel
+    Object.assign(media.style, {  // mirrored first, then cropped: the same order as the export
+      width: natW * k + "px", height: natH * k + "px", left: -c.x * k + "px", top: -c.y * k + "px",
+      transform: `scale(${cur().flipH ? -1 : 1}, ${cur().flipV ? -1 : 1})`,
+    });
+    sel.hidden = !show;
+    Object.assign(sel.style, { ...box, left: stage.offsetLeft + p.x * ks + "px", top: stage.offsetTop + p.y * ks + "px" });
+  }
+
+  function drawBox() {  // the crop box, and the pixel counts (of the box, or of the whole picture)
+    const box = $("#box"), c = frame();
+    box.hidden = !draft;
+    if (draft) Object.assign(box.style, { left: draft.x + "px", top: draft.y + "px", width: draft.w + "px", height: draft.h + "px" });
+    const d = draft ? { cw: draft.w / k, ch: draft.h / k, cx: draft.x / k, cy: draft.y / k } : { cw: c.w, ch: c.h, cx: 0, cy: 0 };
+    for (const [id, v] of Object.entries(d)) if (document.activeElement !== $("#" + id)) $("#" + id).value = Math.round(v);
+    $("#crop-apply").disabled = $("#crop-clear").disabled = !draft;
+  }
+
+  // Crop mode: drag on the plain picture to draw / move / resize a box
+  const view = $("#view");
+  const at = (e) => {
+    const b = view.getBoundingClientRect();
+    return [Math.min(Math.max(e.clientX - b.left, 0), b.width), Math.min(Math.max(e.clientY - b.top, 0), b.height)];
+  };
+  view.addEventListener("pointerdown", (e) => {
+    if (!media || e.button !== 0 || composing()) return;
+    const [x, y] = at(e), corner = e.target.dataset.h;
+    if (corner) {  // resizing from a corner: the opposite corner stays put
+      drag = { ax: corner.includes("w") ? draft.x + draft.w : draft.x, ay: corner.includes("n") ? draft.y + draft.h : draft.y };
+    } else if (e.target.id === "box") {
+      drag = { move: true, dx: x - draft.x, dy: y - draft.y };
+    } else {
+      drag = { ax: x, ay: y };
+      draft = { x, y, w: 0, h: 0 };
+    }
+    view.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  view.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const [x, y] = at(e), vw = view.clientWidth, vh = view.clientHeight;
+    if (drag.move) {
+      draft.x = Math.min(Math.max(x - drag.dx, 0), vw - draft.w);
+      draft.y = Math.min(Math.max(y - drag.dy, 0), vh - draft.h);
+    } else {
+      const ratio = RATIOS[cropRatio], right = x >= drag.ax, down = y >= drag.ay;
+      let w = Math.abs(x - drag.ax), h = Math.abs(y - drag.ay);
+      if (ratio) { w = Math.min(w, (down ? vh - drag.ay : drag.ay) * ratio); h = w / ratio; }  // a fixed shape stays on the picture
+      draft = { x: right ? drag.ax : drag.ax - w, y: down ? drag.ay : drag.ay - h, w, h };
+    }
+    drawBox();
+  });
+  view.addEventListener("pointerup", () => {
+    if (drag && draft && (draft.w < 4 || draft.h < 4)) draft = null;  // a click, not a box
+    drag = null;
+    drawBox();
+  });
+
+  // Move mode: drag the picture to move it, a corner to resize it (from its center), the dot to rotate it
+  const sel = $("#sel");
+  sel.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    const b = sel.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    grab = { mode: e.target.classList.contains("spin") ? "turn" : e.target.dataset.s ? "scale" : "move",
+             x0: e.clientX, y0: e.clientY, cx, cy, d0: Math.hypot(e.clientX - cx, e.clientY - cy) || 1, p0: { ...placement() } };
+    sel.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  sel.addEventListener("pointermove", (e) => {
+    if (!grab) return;
+    const p0 = grab.p0;
+    if (grab.mode === "move") {
+      livePlace = { ...p0, x: p0.x + (e.clientX - grab.x0) / ks, y: p0.y + (e.clientY - grab.y0) / ks };
+    } else if (grab.mode === "scale") {
+      const s = Math.max(0.05, Math.hypot(e.clientX - grab.cx, e.clientY - grab.cy) / grab.d0), w = p0.w * s, h = p0.h * s;
+      livePlace = { x: p0.x + (p0.w - w) / 2, y: p0.y + (p0.h - h) / 2, w, h };
+    } else {
+      let deg = ((Math.atan2(e.clientY - grab.cy, e.clientX - grab.cx) * 180) / Math.PI + 90 + 360) % 360;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      else for (const snap of [0, 90, 180, 270, 360]) if (Math.abs(deg - snap) < 4) deg = snap;  // straight is easy to hit
+      liveTurn = Math.round((deg % 360) * 10) / 10;
+    }
+    layout();
+    readout();
+  });
+  sel.addEventListener("pointerup", () => {
+    const p = livePlace, t = liveTurn, p0 = grab?.p0;
+    grab = livePlace = liveTurn = null;
+    if (t != null) commit({ ...cur(), rotate: t, place: cur().place || p0 });  // turning by hand keeps the size it had
+    else if (p) commit({ ...cur(), place: { x: Math.round(p.x), y: Math.round(p.y), w: even(p.w), h: even(p.h) } });
+  });
+
+  $("#modes").onclick = (e) => { const b = e.target.closest("button"); if (b) { tool = b.dataset.t; draft = null; render(); } };
+  $("#ratios").onclick = (e) => {  // a shape: the biggest box of that shape, centered
+    const b = e.target.closest("button");
+    if (!b) return;
+    cropRatio = b.dataset.r;
+    tool = "crop";
+    render();
+    const ratio = RATIOS[cropRatio], vw = view.clientWidth, vh = view.clientHeight;
+    if (ratio) {
+      let w = vw, h = w / ratio;
+      if (h > vh) { h = vh; w = h * ratio; }
+      draft = { x: (vw - w) / 2, y: (vh - h) / 2, w, h };
+    }
+    drawBox();
+  };
+  for (const id of ["cw", "ch", "cx", "cy"]) $("#" + id).addEventListener("input", () => {  // typed pixel counts
+    if (composing()) { tool = "crop"; render(); }
+    const c = frame(), v = (i) => Math.max(0, +$("#" + i).value || 0);
+    const w = Math.min(Math.max(v("cw"), 2), c.w), h = Math.min(Math.max(v("ch"), 2), c.h);
+    draft = { w: w * k, h: h * k, x: Math.min(v("cx"), c.w - w) * k, y: Math.min(v("cy"), c.h - h) * k };
+    drawBox();
+  });
+  $("#crop-apply").onclick = () => {
+    const c = frame(), step = kind === "video" ? 2 : 1, ev = (n) => Math.max(step, Math.floor(Math.round(n) / step) * step);  // 719.999 is 720
+    const x = Math.round(c.x + draft.x / k), y = Math.round(c.y + draft.y / k);
+    const crop = { x, y, w: ev(Math.min(draft.w / k, c.x + c.w - x)), h: ev(Math.min(draft.h / k, c.y + c.h - y)) };
+    draft = null;
+    tool = home;  // back to the whole picture
+    commit({ ...cur(), crop, size: null, place: null });  // a new crop starts the size and placement over
+  };
+  $("#crop-clear").onclick = () => { draft = null; drawBox(); };
+
+  // ---- Output size, canvas, rotation, mirror, sound, compression ----
+  const outSize = () => (cur().size ? [cur().size.w, cur().size.h] : canvasDims());
+  function resize(w, h) {
+    const [cw, ch] = canvasDims();
+    commit({ ...cur(), size: w === cw && h === ch ? null : { w, h } });
+  }
+  $("#rw").onchange = () => {
+    const [cw, ch] = canvasDims(), w = even(+$("#rw").value || cw);
+    resize(w, $("#lock").checked ? even((w * ch) / cw) : even(+$("#rh").value || ch));
+  };
+  $("#rh").onchange = () => {
+    const [cw, ch] = canvasDims(), h = even(+$("#rh").value || ch);
+    resize($("#lock").checked ? even((h * cw) / ch) : even(+$("#rw").value || cw), h);
+  };
+  $("#rp").onchange = () => {
+    const [cw, ch] = canvasDims(), p = Math.min(Math.max(+$("#rp").value || 100, 1), 400) / 100;
+    resize(even(cw * p), even(ch * p));
+  };
+  $("#canvas").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    tool = "move";
+    commit({ ...cur(), canvas: b.dataset.c || null, place: null, size: null });
+  };
+  $("#fit").onclick = () => { tool = "move"; commit({ ...cur(), place: null }); };
+  $("#fill").onclick = () => { tool = "move"; commit({ ...cur(), place: fitPlace(true) }); };
+  const turnTo = (deg) => { tool = "move"; commit({ ...cur(), rotate: Math.round((((deg % 360) + 360) % 360) * 10) / 10 }); };
+  $("#rot-l").onclick = () => turnTo(turn() - 90);
+  $("#rot-r").onclick = () => turnTo(turn() + 90);
+  $("#angle").onchange = () => turnTo(+$("#angle").value || 0);
+  function flip(axis) {  // the crop box flips with the picture, so it still frames the same thing
+    const r = cur(), c = r.crop;
+    const crop = c && (axis === "H" ? { ...c, x: natW - c.x - c.w } : { ...c, y: natH - c.y - c.h });
+    draft = null;
+    commit({ ...r, ["flip" + axis]: !r["flip" + axis], crop: crop || null });
+  }
+  $("#flip-h").onclick = () => flip("H");
+  $("#flip-v").onclick = () => flip("V");
+  $("#sound").onclick = () => commit({ ...cur(), mute: !cur().mute });
+
+  $("#goal-mode").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const mode = b.dataset.g;  // starts at half the original
+    commit({ ...cur(), goal: mode ? { mode, value: mode === "mb" ? +(file.size / 1048576 / 2).toFixed(2) : 50 } : null });
+  };
+  $("#goal").onchange = () => {
+    const g = cur().goal;
+    if (g) commit({ ...cur(), goal: { ...g, value: Math.max(0.01, +$("#goal").value || g.value) } });
+  };
+  $("#formats").onclick = (e) => { const b = e.target.closest("button"); if (b) commit({ ...cur(), format: b.dataset.f || null }); };
+  const goalBytes = () => { const g = cur().goal; return g && Math.round(g.mode === "mb" ? g.value * 1048576 : (g.value / 100) * file.size); };
+  function goalInfo() {
+    const bytes = goalBytes(), [s, e] = trimRange(), kbps = bytes && (bytes * 8) / Math.max(e - s, 0.1) / 1000 - 128;
+    $("#goal-info").textContent = !bytes ? `Original: ${size(file.size)}`
+      : `${size(file.size)} → ${size(bytes)}` + (kind === "video" ? ` · about ${Math.max(0, Math.round(kbps))} kbps for the picture`
+        + (kbps < 300 ? " — that will look rough" : "") : kind === "gif" ? " · GIFs shrink by getting smaller: MP4 or WebP are far lighter" : "");
+  }
+
+  // ---- Timeline: a filmstrip with the trim handles on it; the parts cut off stay grayed out ----
+  const tl = $("#timeline");
+  let scrub = null, liveTrim = null, grabDt = 0;  // what the pointer is doing; the trim while a handle moves (one undo step when it lets go)
+  const trimRange = () => (cur().trim ? [cur().trim.start, cur().trim.end] : [0, duration]);
+  const shownTrim = () => liveTrim || trimRange();
+  const timeAt = (e) => { const b = tl.getBoundingClientRect(); return Math.min(Math.max((e.clientX - b.left) / b.width, 0), 1) * duration; };
+  const commitTrim = ([s, e]) => commit({ ...cur(), trim: s <= 0.01 && e >= duration - 0.01 ? null : { start: s, end: e } });
+
+  function drawTimeline() {
+    const [s, e] = shownTrim(), pct = (t) => (t / duration) * 100 + "%";
+    $("#cut-l").style.width = pct(s);
+    $("#cut-r").style.width = pct(duration - e);
+    Object.assign($("#range").style, { left: pct(s), width: pct(e - s) });
+    $("#playhead").style.left = pct(media.currentTime);
+    $("#h-start").ariaValueText = stamp(s);
+    $("#h-end").ariaValueText = stamp(e);
+    $("#trim-info").textContent = `trim ${stamp(s)} → ${stamp(e)} · ${stamp(e - s)} long`;
+  }
+  function scrubTo(e) {  // a handle shows the frame it's on; elsewhere the strip seeks (inside the trim)
+    const t = Math.min(Math.max(timeAt(e) + grabDt, 0), duration), [s, end] = shownTrim();
+    if (scrub === "start") liveTrim = [Math.min(t, end - 0.1), end];
+    if (scrub === "end") liveTrim = [s, Math.max(t, s + 0.1)];
+    media.pause();
+    media.currentTime = scrub === "start" ? liveTrim[0] : scrub === "end" ? liveTrim[1] : Math.min(Math.max(t, s), end);
+    drawTimeline();
+  }
+  tl.addEventListener("pointerdown", (e) => {
+    if (!media || e.button !== 0) return;
+    scrub = { "h-start": "start", "h-end": "end" }[e.target.id] || "seek";
+    const [s, end] = shownTrim();
+    grabDt = scrub === "start" ? s - timeAt(e) : scrub === "end" ? end - timeAt(e) : 0;  // a handle doesn't jump to the pointer
+    tl.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    scrubTo(e);
+  });
+  tl.addEventListener("pointermove", (e) => scrub && scrubTo(e));
+  tl.addEventListener("pointerup", () => {
+    if (liveTrim) commitTrim(liveTrim);
+    scrub = liveTrim = null;
+    render();
+  });
+  for (const [id, end] of [["h-start", 0], ["h-end", 1]]) {  // arrow keys: 0.1 s, with Shift 1 s
+    $("#" + id).addEventListener("keydown", (e) => {
+      const dir = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+      if (!dir) return;
+      e.preventDefault();
+      const r = [...shownTrim()];
+      r[end] = Math.min(Math.max(r[end] + dir * (e.shiftKey ? 1 : 0.1), end ? r[0] + 0.1 : 0), end ? duration : r[1] - 0.1);
+      liveTrim = r;
+      media.currentTime = r[end];
+      drawTimeline();
+    });
+    $("#" + id).addEventListener("keyup", (e) => {
+      if (liveTrim && e.key.startsWith("Arrow")) { commitTrim(liveTrim); liveTrim = null; }
+    });
+  }
+
+  let stripToken = 0;
+  async function filmstrip() {  // frames from a hidden second copy of the video, drawn side by side
+    const token = ++stripToken, canvas = $("#strip"), dpr = devicePixelRatio || 1, W = tl.clientWidth, H = tl.clientHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    const ctx = canvas.getContext("2d"), cell = (H * natW) / natH, n = Math.min(30, Math.ceil(W / cell));
+    const v = Object.assign(document.createElement("video"), { muted: true, preload: "auto", src: media.src });
+    try {
+      await new Promise((ok, fail) => { v.onloadeddata = ok; v.onerror = fail; });
+      for (let i = 0; i < n && token === stripToken; i++) {
+        v.currentTime = Math.min(duration - 0.05, ((i + 0.5) * duration) / n);
+        await new Promise((ok) => (v.onseeked = ok));
+        ctx.drawImage(v, i * cell * dpr, 0, cell * dpr, H * dpr);
+      }
+    } catch {}  // no strip is fine: the handles still work
+    v.removeAttribute("src");
+    v.load();
+  }
+
+  // ---- History: every change is a step; Undo / Redo / Revert and Ctrl+Z / Ctrl+Y walk it ----
+  function commit(r) {
+    history = history.slice(0, pos + 1).concat([r]);
+    pos = history.length - 1;
+    render();
+  }
+  $("#undo").onclick = () => { if (pos > 0) { pos--; draft = null; render(); } };
+  $("#redo").onclick = () => { if (pos < history.length - 1) { pos++; draft = null; render(); } };
+  $("#revert").onclick = () => { draft = null; tool = home; commit(blank()); };  // revert is a step too, so it can be undone
+  addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !media || e.target.matches("input[type=number]")) return;  // number boxes undo their own typing
+    const key = e.key.toLowerCase();
+    if (key === "z" && !e.shiftKey) { e.preventDefault(); $("#undo").click(); }
+    else if (key === "y" || (key === "z" && e.shiftKey)) { e.preventDefault(); $("#redo").click(); }
+  });
+
+  function readout() {
+    const [w, h] = outSize(), [s, e] = trimRange(), r = cur();
+    $("#readout").textContent = [`Output ${w} × ${h} px`, kind === "video" && `${stamp(e - s)} long`, turn() && `rotated ${turn()}°`,
+      kind === "video" && r.mute && "no sound", `original ${natW} × ${natH} px · ${size(file.size)}`].filter(Boolean).join(" · ");
+  }
+
+  function render() {
+    if (!media || !natW) return renderExport();
+    const r = cur();
+    layout();
+    drawBox();
+    const pressed = (sel, key, value) => document.querySelectorAll(sel + " button").forEach((b) => (b.ariaPressed = String((b.dataset[key] || "") === (value || ""))));
+    pressed("#modes", "t", tool);
+    pressed("#ratios", "r", cropRatio);
+    pressed("#canvas", "c", r.canvas);
+    pressed("#goal-mode", "g", r.goal?.mode);
+    pressed("#formats", "f", r.format);
+    $("#flip-h").ariaPressed = String(r.flipH);
+    $("#flip-v").ariaPressed = String(r.flipV);
+    $("#sound").ariaPressed = String(!r.mute);
+    $("#sound").textContent = r.mute ? "Sound off" : "Sound on";
+    const [w, h] = outSize(), [cw] = canvasDims();
+    for (const [id, v] of [["rw", w], ["rh", h], ["rp", Math.round((w / cw) * 100)], ["angle", turn()]])
+      if (document.activeElement !== $("#" + id)) $("#" + id).value = v;
+    if (kind === "video") {
+      media.muted = r.mute;
+      drawTimeline();
+    }
+    $("#goal-field").hidden = !r.goal;
+    if (r.goal) { $("#goal").value = r.goal.value; $("#goal-unit").textContent = r.goal.mode === "mb" ? "MB" : "% of the original"; }
+    goalInfo();
+    readout();
+    $("#undo").disabled = pos === 0;
+    $("#redo").disabled = pos === history.length - 1;
+    $("#revert").disabled = JSON.stringify(r) === JSON.stringify(blank());
+    tick();
+    renderExport();
+  }
+
+  function tick() {  // the video's own controls, kept inside the trim
+    if (!media || kind !== "video") return;
+    const [s, e] = trimRange();
+    if (!media.paused && media.currentTime >= e - 0.03) { media.pause(); media.currentTime = s; }
+    if (!scrub) drawTimeline();
+    $("#time").textContent = `${clock(media.currentTime)} / ${clock(duration)}`;
+    $("#play").textContent = media.paused ? "Play" : "Pause";
+  }
+  $("#play").onclick = () => {
+    const [s, e] = trimRange();
+    if (!media.paused) return media.pause();
+    if (media.currentTime < s || media.currentTime >= e - 0.05) media.currentTime = s;
+    media.play();
+  };
+  addEventListener("resize", () => media && render());
+
+  // ---- Export: one job on the server, with progress, pause and cancel ----
+  function target() {
+    if (kind === "video") return "mp4";
+    if (kind === "gif") return "gif";
+    const ext = file.name.split(".").pop().toLowerCase();
+    return cur().format || { jpeg: "jpg", jpg: "jpg", png: "png", webp: "webp" }[ext] || "png";
+  }
+  function recipe() {
+    const r = cur(), placed = MODE === "editor" && (r.canvas || r.rotate || r.place);  // else the plain picture: a quicker export
+    return { flipH: r.flipH, flipV: r.flipV, mute: r.mute, crop: r.crop, size: r.size, canvas: r.canvas,
+             place: placed ? placement() : null, rotate: r.rotate, trim: r.trim, target_bytes: goalBytes() };
+  }
+  $("#export").onclick = async () => {
+    const r = await post("/convert/start", { id: jobId, target: target(), recipe: recipe() }).then((res) => res.json()).catch(() => ({ ok: false }));
+    note = r.ok ? "" : "✗ couldn't start the export";
+    poll();
+  };
+  $("#pause").onclick = () => post("/convert/" + (job?.status === "paused" ? "resume" : "pause"), { id: jobId }).catch(() => {}).then(poll);
+  $("#stop").onclick = () => post("/convert/stop", { id: jobId }).catch(() => {}).then(poll);
+
+  function openLink(path) {  // Explorer opens on the result: a web page can't open local folders itself
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Open folder" });
+    b.onclick = async () => {
+      const r = await post("/open", { file: path }).catch(() => null);
+      if (!r?.ok) b.textContent = "file moved or deleted";
+    };
+    return b;
+  }
+  function renderExport() {
+    const busy = job && ["queued", "busy", "paused"].includes(job.status), running = job && ["busy", "paused"].includes(job.status);
+    $("#export").disabled = !jobId || !!busy;
+    $("#pause").hidden = !running;
+    $("#pause").textContent = job?.status === "paused" ? "Continue" : "Pause";
+    $("#stop").hidden = !busy;
+    const p = job && progress[job.id], f = p?.total && p.done != null ? Math.min(p.done / p.total, 1) : null;
+    const bar = $("#bar"), st = $("#status"), part = running ? f : uploaded;
+    bar.hidden = !(running || uploaded != null);
+    if (part != null) bar.value = part; else bar.removeAttribute("value");
+    st.className = "status " + (job?.status === "done" ? "ok" : job?.status === "error" || note.startsWith("✗") ? "err" : busy || uploaded != null ? "live" : "");
+    st.textContent = !job || job.status === "ready" ? (uploaded == null && job?.msg) || note
+      : job.status === "queued" ? "queued · waiting for a free slot"
+      : job.status === "busy" ? (!p ? "starting…" : p.unit === "tries" ? `fitting the size goal · try ${p.done}`
+        : [f != null && `${Math.floor(f * 100)}%`, p.speed && p.speed !== "N/A" && `${p.speed.trim()} speed`].filter(Boolean).join(" · ") || "working…")
+      : job.status === "paused" ? "paused" + (f != null ? ` · ${Math.floor(f * 100)}%` : "")
+      : job.status === "done" ? `✓ ${job.msg} · ${size(job.out_size)} (was ${size(file.size)})${job.note ? " — " + job.note : ""}`
+      : "✗ " + job.msg;
+    if (job?.status === "done" && job.file) st.append(" ", openLink(job.file));
+  }
+  async function poll() {
+    try {
+      const s = await (await fetch("/convert/state?tool=" + MODE)).json();
+      job = (jobId && s.jobs.find((j) => j.id === jobId)) || null;
+      progress = s.progress;
+      if (!$("#pick").disabled) $("#out").textContent = s.out;
+    } catch {}
+    renderExport();
+  }
+  $("#pick").onclick = async () => {
+    const b = $("#pick");
+    b.disabled = true;
+    b.textContent = "Pick it in the window…";
+    try {
+      const r = await (await post("/folder", { which: "convert_out" })).json();
+      if (r.ok) $("#out").textContent = r.out;
+    } catch {}
+    b.disabled = false;
+    b.textContent = "Change";
+  };
+
+  const drop = $("#drop");  // the whole page takes a drop; the box lights up
+  addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  addEventListener("dragleave", (e) => { if (!e.relatedTarget) drop.classList.remove("over"); });
+  addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  });
+  $("#file").onchange = (e) => { if (e.target.files[0]) load(e.target.files[0]); e.target.value = ""; };
+  poll();
+  setInterval(poll, 1000);
+</script>
+</body>
+</html>

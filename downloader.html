@@ -14,7 +14,8 @@
 
   <form id="form">
     <input id="url" type="url" required placeholder="Paste a YouTube / X / Instagram / TikTok link" aria-label="Video link" autofocus>
-    <button>Download</button>
+    <button value="video" aria-label="Download video">Video</button>
+    <button value="audio" class="alt" aria-label="Download audio as MP3">Audio</button>
   </form>
   <p class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></p>
   <p class="status err" id="status"></p>
@@ -81,8 +82,8 @@
 
   $("#form").onsubmit = async (e) => {
     e.preventDefault();
-    const url = $("#url").value.trim();
-    if (await start({ key: url, url })) $("#url").value = "";
+    const url = $("#url").value.trim();  // Enter means Video, the first button
+    if (await start({ key: url, url, audio: e.submitter?.value === "audio" })) $("#url").value = "";
   };
 
   $("#pick").onclick = async () => {
@@ -103,7 +104,7 @@
     li.innerHTML = '<b></b><span class="thumb"><img alt=""><i class="badge"></i></span>'
       + '<div><div class="t"></div><progress max="1" hidden aria-label="Download progress"></progress><div class="status"></div></div>'
       + '<div class="acts"><button class="go"></button><button class="x">✕</button></div>';
-    const name = it.title || it.url || it.page;
+    const name = (it.title || it.url || it.page) + (it.audio ? " (audio)" : "");
     li.querySelector("b").textContent = String(i + 1).padStart(2, "0");
     const img = li.querySelector("img");
     img.referrerPolicy = "no-referrer"; // some CDNs refuse images hotlinked from another site
@@ -130,7 +131,7 @@
     const sizes = p && `${size(p.done)} / ${size(p.total)}`;
     v.st.textContent = d.status === "busy"
       ? !p ? "starting…"
-        : p.part === "audio" && p.status === "finished" ? "merging video + audio…"
+        : p.part === "audio" && p.status === "finished" ? (d.audio ? "making the MP3…" : "merging video + audio…")
         : [p.part, sizes, p.speed && size(p.speed) + "/s"].filter(Boolean).join(" · ")
       : d.status === "paused" ? ["paused", sizes].filter(Boolean).join(" · ")
       : (d.status === "done" ? "✓ " : "✗ ") + d.msg;
@@ -171,10 +172,14 @@
     }
     $("#list").replaceChildren(...list.map((it, i) => {
       const r = row(it, i);
-      r.x.remove();
-      r.btn.textContent = "Get";
-      r.btn.ariaLabel = "Download: " + r.name;
-      r.btn.onclick = () => start({ key: it.key, page: it.page, media: it.media, title: it.title });
+      const get = (audio) => () => start({ key: it.key, page: it.page, media: it.media, title: it.title, audio });
+      r.btn.textContent = "Video";
+      r.btn.ariaLabel = "Download video: " + r.name;
+      r.btn.onclick = get(false);
+      r.x.className = "go alt";  // the second button becomes Audio
+      r.x.textContent = "Audio";
+      r.x.ariaLabel = "Download audio as MP3: " + r.name;
+      r.x.onclick = get(true);
       r.st.textContent = `${host(it.page)} · ${new Date(it.ts * 1000).toLocaleTimeString()}`;
       return r.li;
     }));
