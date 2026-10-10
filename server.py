@@ -21,7 +21,8 @@ import convert
 
 PORT = 8765
 PAGES = {"/": "index.html", "/downloader": "downloader.html", "/converter": "converter.html", "/style.css": "style.css",
-         "/editor": "studio.html", "/compressor": "studio.html"}  # one page for both: it adapts to its address
+         "/editor": "studio.html", "/compressor": "studio.html",  # one page for both: it adapts to its address
+         "/image": "image.html"}
 COOKIES = Path(__file__).parent / "cookies.txt"  # synced from Chrome by the extension; holds logins, keep private
 SETTINGS = Path(__file__).parent / "settings.json"
 EXTENSION_DIR = Path(__file__).parent / "extension"
@@ -46,6 +47,7 @@ sniffed, jobs, lock = deque(maxlen=10), {}, threading.Lock()  # jobs: download k
 downloads = {}  # download key -> its row in the Downloads list, so new catches can't push it out
 procs, stops, stems = {}, {}, {}  # download key -> running yt-dlp / "pause" or "cancel" asked / output path minus ext
 thumbs, previewing = {}, set()  # thumb id -> jpeg; list keys whose preview is being made
+saved = set()  # files the image editor wrote (Open folder may show them)
 picking = threading.Lock()  # one folder dialog at a time
 
 
@@ -313,11 +315,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         origin = self.headers.get("Origin", "")
-        upload = self.path == "/convert/upload"
+        upload = self.path in ("/convert/upload", "/image/save")
         # JSON and octet-stream bodies make browsers preflight cross-site requests, which this server never answers
         if (self.headers.get("Host") not in HOSTS or (origin and not origin.startswith(ORIGINS))
                 or not self.headers.get("Content-Type", "").startswith("application/octet-stream" if upload else "application/json")):
             return self.reply(403, {"ok": False, "error": "forbidden"})
+        if self.path == "/image/save":  # the image editor draws the picture itself; this only writes it to the folder
+            name, size = Path(unquote(self.headers.get("X-Filename", "image.png"))), int(self.headers.get("Content-Length", 0))
+            data = self.rfile.read(size) if 0 < size <= 500 * 2 ** 20 else b""
+            magic = {"png": data[:4] == b"\x89PNG", "jpg": data[:2] == b"\xff\xd8", "webp": data[8:12] == b"WEBP",
+                     "mtimg": data.startswith(b'{"format":"multitool-image"')}  # a saved project: layers + settings
+            if not magic.get(name.suffix[1:].lower()):
+                return self.reply(400, {"ok": False, "error": "not a PNG, JPG, WebP or project"})
+            out = convert.reserve(Path(settings["convert_out"]), name.stem, name.suffix[1:].lower())
+            out.write_bytes(data)
+            with lock:
+                saved.add(str(out))
+            return self.reply(200, {"ok": True, "file": str(out), "size": size})
         if upload:
             job = convert.add(self.rfile, int(self.headers.get("Content-Length", 0)), unquote(self.headers.get("X-Filename", "file")),
                               self.headers.get("X-Tool", "converter"))
@@ -370,7 +384,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/open":  # show a finished file in Explorer; only files this app produced
             f = b.get("file")
             with lock:
-                ours = {d.get("file") for d in downloads.values()}
+                ours = {d.get("file") for d in downloads.values()} | saved
             ours |= {j.get("file") for j in convert.state()["jobs"]}
             if not (isinstance(f, str) and f in ours and Path(f).is_file()):
                 return self.reply(404, {"ok": False, "error": "file moved or deleted"})

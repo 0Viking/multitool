@@ -1,0 +1,1496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Image editor</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="app nodoc">
+  <header class="bar">
+    <a class="back" href="/">← Multitool</a>
+    <strong class="app-name">Image edit<span>or</span></strong>
+    <button type="button" id="new-project" title="New project">New…</button>
+    <label class="filebtn" title="Open images or a project (Ctrl+O)"><input type="file" id="file" accept="image/*,.mtimg" multiple>Open…</label>
+    <button type="button" id="save-project" title="Save the project to keep editing later (Ctrl+Shift+S)">Save project</button>
+    <button type="button" id="undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button type="button" id="redo" title="Redo (Ctrl+Y)">↷ Redo</button>
+    <span class="grow"></span>
+    <button type="button" id="close" title="Close the image">Close</button>
+    <div class="chips" id="formats" role="group" aria-label="Export format">
+      <button type="button" data-f="png">PNG</button><button type="button" data-f="jpg">JPG</button><button type="button" data-f="webp">WebP</button>
+    </div>
+    <label class="slide" id="q-row"><span>Quality</span><input type="range" id="quality" min="10" max="100" value="92"><output></output></label>
+    <span class="saveto" title="Exports and projects are saved here">Save to <span class="out" id="out">…</span>
+      <button type="button" class="pick" id="pick">Change</button></span>
+    <button type="button" class="go" id="export" title="Export (Ctrl+S)">Export</button>
+  </header>
+
+  <div class="options" id="options">
+    <div id="opt-move">Click a layer to pick it · drag to move · corners resize · the dot rotates (Shift: 15° steps) · arrows nudge · double-click text to edit it</div>
+    <div id="opt-crop" hidden>
+      <div class="chips" id="ratios" role="group" aria-label="Crop shape">
+        <button type="button" data-r="">Free</button><button type="button" data-r="1:1">1:1</button>
+        <button type="button" data-r="4:3">4:3</button><button type="button" data-r="3:4">3:4</button>
+        <button type="button" data-r="16:9">16:9</button><button type="button" data-r="9:16">9:16</button>
+      </div>
+      <label>W <input type="number" id="cw" min="1"></label><label>H <input type="number" id="ch" min="1"></label>
+      <label>X <input type="number" id="cx"></label><label>Y <input type="number" id="cy"></label>
+      <button type="button" class="go" id="crop-apply" title="Enter">✓ Apply</button>
+      <button type="button" id="crop-cancel" title="Esc">✕ Cancel</button>
+    </div>
+    <div id="opt-select" hidden>
+      <div class="chips" id="marquee-shape" data-for="marquee" role="group" aria-label="Selection shape">
+        <button type="button" data-m="rect">Rectangle</button><button type="button" data-m="ellipse">Ellipse</button>
+      </div>
+      <span data-for="lasso">Drag around what you want</span>
+      <label class="slide" data-for="wand"><span>Tolerance</span><input type="range" id="w-tol" min="0" max="100" value="20"><output></output></label>
+      <label class="check" data-for="wand"><input type="checkbox" id="w-contig" checked> touching only</label>
+      <span>Shift adds · Alt removes</span>
+      <button type="button" id="sel-all" title="Ctrl+A">All</button><button type="button" id="sel-none" title="Ctrl+D">Deselect</button>
+      <button type="button" id="sel-inv" title="Ctrl+Shift+I">Invert</button><button type="button" id="sel-crop">Crop to it</button>
+      <button type="button" id="sel-copy" title="Ctrl+C">Copy</button><button type="button" id="sel-cut" title="Ctrl+X">Cut</button>
+      <button type="button" id="sel-layer" title="Ctrl+J">To new layer</button><button type="button" id="sel-del" title="Delete">Delete</button>
+    </div>
+    <div id="opt-paint" hidden>
+      <label class="slide"><span>Size</span><input type="range" id="b-size" min="1" max="500" value="30"><output></output></label>
+      <label class="slide"><span>Hardness</span><input type="range" id="b-hard" min="0" max="100" value="80"><output></output></label>
+      <label class="slide"><span>Opacity</span><input type="range" id="b-opac" min="1" max="100" value="100"><output></output></label>
+      <span>[ ] size · Alt+click picks a color · stays inside a selection</span>
+    </div>
+    <div id="opt-bucket" hidden>
+      <label class="slide"><span>Tolerance</span><input type="range" id="f-tol" min="0" max="100" value="20"><output></output></label>
+      <label class="check"><input type="checkbox" id="f-contig" checked> touching only</label>
+      <span>Fills with the foreground color</span>
+    </div>
+    <div id="opt-gradient" hidden>
+      <div class="chips" id="g-type" role="group" aria-label="Gradient shape"><button type="button" data-g="linear">Linear</button><button type="button" data-g="radial">Radial</button></div>
+      <div class="chips" id="g-to" role="group" aria-label="Gradient end"><button type="button" data-to="bg">Foreground → background</button><button type="button" data-to="clear">Foreground → see-through</button></div>
+      <span>Drag across the picture</span>
+    </div>
+    <div id="opt-pick" hidden>Click: foreground color · Alt+click: background color · samples what you see</div>
+    <div id="opt-text" hidden>
+      <select id="tx-font" aria-label="Font"></select>
+      <label>Size <input type="number" id="tx-size" min="4" max="2000" value="72"></label>
+      <button type="button" id="tx-bold" aria-label="Bold"><b>B</b></button><button type="button" id="tx-italic" aria-label="Italic"><i>I</i></button>
+      <div class="chips" id="tx-align" role="group" aria-label="Alignment"><button type="button" data-a="left">Left</button><button type="button" data-a="center">Center</button><button type="button" data-a="right">Right</button></div>
+      <label>Color <input type="color" id="tx-color" value="#000000"></label>
+      <textarea id="tx-value" rows="1" placeholder="Click the picture to add text" aria-label="Text"></textarea>
+    </div>
+    <div id="opt-shape" hidden>
+      <div class="chips" id="sh-type" role="group" aria-label="Shape"><button type="button" data-s="rect">Rectangle</button><button type="button" data-s="ellipse">Ellipse</button><button type="button" data-s="line">Line</button></div>
+      <label class="check"><input type="checkbox" id="sh-fill-on" checked> Fill</label><input type="color" id="sh-fill" value="#d4ff00" aria-label="Fill color">
+      <label class="check"><input type="checkbox" id="sh-stroke-on"> Outline</label><input type="color" id="sh-stroke" value="#000000" aria-label="Outline color">
+      <label>Width <input type="number" id="sh-width" min="1" max="200" value="6"></label>
+      <span>Shift: square / circle / 45°</span>
+    </div>
+    <div id="opt-hand" hidden>Drag to look around · or hold Space with any tool · the wheel zooms</div>
+    <div id="opt-zoom" hidden>Click to zoom in · Alt+click to zoom out · Ctrl+0 fits · Ctrl+1 is 100%</div>
+  </div>
+
+  <div class="desk">
+    <nav class="toolbox" id="tools" aria-label="Tools">
+      <button type="button" data-t="move" title="Move (V)">Move<kbd>V</kbd></button>
+      <button type="button" data-t="marquee" title="Marquee selection (M)">Select<kbd>M</kbd></button>
+      <button type="button" data-t="lasso" title="Lasso (L)">Lasso<kbd>L</kbd></button>
+      <button type="button" data-t="wand" title="Magic wand (W)">Wand<kbd>W</kbd></button>
+      <button type="button" data-t="crop" title="Crop (C)">Crop<kbd>C</kbd></button>
+      <button type="button" data-t="eyedropper" title="Eyedropper (I)">Picker<kbd>I</kbd></button>
+      <button type="button" data-t="brush" title="Brush (B)">Brush<kbd>B</kbd></button>
+      <button type="button" data-t="eraser" title="Eraser (E)">Eraser<kbd>E</kbd></button>
+      <button type="button" data-t="bucket" title="Paint bucket (G)">Fill<kbd>G</kbd></button>
+      <button type="button" data-t="gradient" title="Gradient (G again)">Gradient<kbd>G</kbd></button>
+      <button type="button" data-t="text" title="Text (T)">Text<kbd>T</kbd></button>
+      <button type="button" data-t="shape" title="Shapes (U)">Shape<kbd>U</kbd></button>
+      <button type="button" data-t="hand" title="Hand (H) · or hold Space">Hand<kbd>H</kbd></button>
+      <button type="button" data-t="zoom" title="Zoom (Z)">Zoom<kbd>Z</kbd></button>
+      <div class="swatches">
+        <label class="sw fg" title="Foreground color"><input type="color" id="fg" value="#000000" aria-label="Foreground color"></label>
+        <label class="sw bg" title="Background color"><input type="color" id="bg" value="#ffffff" aria-label="Background color"></label>
+      </div>
+      <button type="button" id="swap" title="Swap colors (X) · D resets to black and white" aria-label="Swap colors">⇄</button>
+    </nav>
+
+    <main class="work" id="work">
+      <div class="paper" id="paper"></div>
+      <canvas id="canvas"></canvas>
+      <div class="crop-area" id="crop-area"><div class="box" id="box" hidden><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div>
+      <div class="sel" id="sel" hidden>
+        <i data-s="nw"></i><i data-s="ne"></i><i data-s="sw"></i><i data-s="se"></i>
+        <b class="spin" title="Drag to rotate · Shift: 15° steps"></b>
+      </div>
+      <div class="ring" id="ring" hidden></div>
+      <div class="start" id="start">
+        <strong class="start-title">Image edit<span>or</span></strong>
+        <div class="start-btns">
+          <button type="button" id="new-project2">＋ New project</button>
+          <label class="filebtn"><input type="file" id="file2" accept="image/*,.mtimg" multiple>🖥 Open from computer</label>
+        </div>
+        <div class="dropzone">Drop any image or project here · or paste one with Ctrl+V</div>
+        <p class="status err" id="load-error"></p>
+      </div>
+    </main>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Resize the side panel" tabindex="0"
+         title="Drag to resize · arrow keys too"></div>
+    <aside class="side">
+      <div class="side-top">
+      <details open>
+        <summary>Properties</summary>
+        <div class="pane">
+          <div class="fields">
+            <label>X <input type="number" id="px"></label><label>Y <input type="number" id="py"></label>
+            <label>W <input type="number" id="pw" min="1"></label><label>H <input type="number" id="ph" min="1"></label>
+            <label>∠ <input type="number" id="angle" step="1"> °</label>
+            <label class="check"><input type="checkbox" id="plock" checked> keep shape</label>
+          </div>
+          <div class="chips">
+            <button type="button" id="fit">Fit</button><button type="button" id="fill">Fill</button>
+            <button type="button" id="rot-l" aria-label="Rotate the layer left 90 degrees">⟲ 90°</button>
+            <button type="button" id="rot-r" aria-label="Rotate the layer right 90 degrees">⟳ 90°</button>
+            <button type="button" id="flip-h">↔ Mirror</button><button type="button" id="flip-v">↕ Flip</button>
+          </div>
+          <div class="chips">
+            <button type="button" id="fill-fg" title="Alt+Backspace">Fill with foreground</button>
+            <button type="button" id="rasterize" title="Text and shapes become plain pixels">Rasterize</button>
+          </div>
+        </div>
+      </details>
+      <details>
+        <summary>Adjustments</summary>
+        <div class="pane"><div id="adjust"></div>
+          <div class="chips">
+            <button type="button" id="bw">Black &amp; white</button><button type="button" id="invert">Invert</button>
+            <button type="button" id="adj-reset">Reset all</button>
+          </div>
+          <p class="hint">On the selected layer. Double-click a slider to reset it.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Curves</summary>
+        <div class="pane">
+          <canvas class="curve" id="curve" width="256" height="256" aria-label="Tone curve"></canvas>
+          <p class="hint">Click to add a point, drag to bend, drag a point out to remove it. <button type="button" class="link" id="curve-reset">Reset</button></p>
+        </div>
+      </details>
+      <details>
+        <summary>Levels &amp; filters</summary>
+        <div class="pane"><div id="filters"></div></div>
+      </details>
+      <details>
+        <summary>Image</summary>
+        <div class="pane">
+          <p class="hint">Canvas size (layers stay centered)</p>
+          <div class="fields"><label>W <input type="number" id="iw" min="1"></label><label>H <input type="number" id="ih" min="1"></label></div>
+          <p class="hint">Resize everything</p>
+          <div class="fields">
+            <label>W <input type="number" id="rw" min="1"></label><label>H <input type="number" id="rh" min="1"></label>
+            <label><input type="number" id="rp" min="1" max="1000"> %</label>
+            <label class="check"><input type="checkbox" id="lock" checked> keep shape</label>
+          </div>
+          <div class="chips">
+            <button type="button" id="img-rot-l" aria-label="Rotate the image left 90 degrees">⟲ 90°</button>
+            <button type="button" id="img-rot-r" aria-label="Rotate the image right 90 degrees">⟳ 90°</button>
+            <button type="button" id="img-flip-h">↔ Mirror</button><button type="button" id="img-flip-v">↕ Flip</button>
+          </div>
+        </div>
+      </details>
+      <details>
+        <summary>History</summary>
+        <div class="pane"><ol class="hist" id="hist" aria-label="History"></ol></div>
+      </details>
+      </div>
+      <section class="layers-panel" aria-label="Layers">
+        <h3>Layers</h3>
+        <div class="layer-top">
+          <select id="blend" aria-label="Blend mode"></select>
+          <label class="slide" id="opacity-row"><span>Opacity</span><input type="range" min="0" max="100" value="100" data-k="opacity"><output></output></label>
+        </div>
+        <ol class="layers" id="layers"></ol>
+        <div class="layer-btns">
+          <button type="button" id="new-layer" title="New empty layer">＋ New</button>
+          <button type="button" id="dup" title="Duplicate (Ctrl+J)">Copy</button>
+          <button type="button" id="merge" title="Merge down (Ctrl+E)">Merge ↓</button>
+          <button type="button" id="flatten" title="Flatten all visible layers into one">Flatten</button>
+          <button type="button" id="lock-btn" title="Lock position: the layer can be picked but not moved">Lock</button>
+          <button type="button" id="del" title="Delete the layer (Del)">Delete</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="status-bar">
+    <span class="zoom">
+      <button type="button" id="zoom-out" title="Zoom out (Ctrl+−)" aria-label="Zoom out">−</button>
+      <button type="button" id="zoom-fit" title="Fit on screen (Ctrl+0)">100%</button>
+      <button type="button" id="zoom-in" title="Zoom in (Ctrl++)" aria-label="Zoom in">+</button>
+    </span>
+    <span id="readout"></span>
+    <p class="status" id="status"></p>
+  </footer>
+  <dialog class="newdoc" id="new-dialog">
+    <form method="dialog">
+      <h3>New project</h3>
+      <label>Name <input id="nd-name" value="Untitled" required></label>
+      <div class="chips" id="nd-presets" role="group" aria-label="Presets">
+        <button type="button" data-p="1920 1080 px 72">HD 1920×1080</button><button type="button" data-p="3840 2160 px 72">4K</button>
+        <button type="button" data-p="1080 1080 px 72">Square post</button><button type="button" data-p="1080 1350 px 72">Portrait post</button>
+        <button type="button" data-p="1080 1920 px 72">Story</button><button type="button" data-p="210 297 mm 300">A4</button>
+        <button type="button" data-p="8.5 11 in 300">Letter</button><button type="button" data-p="4 6 in 300">Photo 4×6"</button>
+      </div>
+      <div class="fields">
+        <label>Width <input type="number" id="nd-w" value="1920" min="0.01" step="any" required></label>
+        <label>Height <input type="number" id="nd-h" value="1080" min="0.01" step="any" required></label>
+        <select id="nd-unit" aria-label="Unit"><option value="px">pixels</option><option value="in">inches</option>
+          <option value="cm">centimeters</option><option value="mm">millimeters</option></select>
+      </div>
+      <div class="fields"><label>Resolution <input type="number" id="nd-dpi" value="72" min="1" max="2400" required> pixels/inch</label></div>
+      <div class="chips" id="nd-bg" role="group" aria-label="Background">
+        <button type="button" data-bg="#ffffff">White</button><button type="button" data-bg="#000000">Black</button>
+        <button type="button" data-bg="">Transparent</button>
+        <label class="pickcolor">Color <input type="color" id="nd-color" value="#d4ff00"></label>
+      </div>
+      <p class="hint" id="nd-info"></p>
+      <div class="acts"><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="go">Create</button></div>
+    </form>
+  </dialog>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="fx"></defs></svg>
+
+<script>
+  // Everything is drawn here, in the browser. Layers are pictures plus settings (position, size, turn, adjustments,
+  // filters) applied while drawing; painting, filling, clearing and the like make a new copy of the layer's pixels, so
+  // every step stays undoable. Text and shape layers keep their settings and are redrawn from them.
+  // The server only writes exported images and saved projects into the output folder.
+  const $ = (s) => document.querySelector(s);
+  const RATIOS = { "1:1": 1, "4:3": 4 / 3, "3:4": 3 / 4, "16:9": 16 / 9, "9:16": 9 / 16 };
+  const ADJ = { exposure: 0, brightness: 0, contrast: 0, saturation: 0, hue: 0, bw: false, invert: false,
+                black: 0, white: 255, gamma: 1, curve: null, blur: 0, sharpen: 0, pixelate: 1 };
+  const SLIDERS = {  // key, label, min, max, step
+    "#adjust": [["exposure", "Exposure", -3, 3, 0.1], ["brightness", "Brightness", -100, 100, 1], ["contrast", "Contrast", -100, 100, 1],
+                ["saturation", "Saturation", -100, 100, 1], ["hue", "Hue", -180, 180, 1]],
+    "#filters": [["black", "Black point", 0, 254, 1], ["white", "White point", 1, 255, 1], ["gamma", "Midtones", 0.1, 5, 0.01],
+                 ["blur", "Blur", 0, 50, 0.5], ["sharpen", "Sharpen", 0, 3, 0.1], ["pixelate", "Pixelate", 1, 64, 1]],
+  };
+  const BLENDS = { "source-over": "Normal", multiply: "Multiply", screen: "Screen", overlay: "Overlay", darken: "Darken",
+    lighten: "Lighten", "color-dodge": "Color dodge", "color-burn": "Color burn", "hard-light": "Hard light", "soft-light": "Soft light",
+    difference: "Difference", exclusion: "Exclusion", hue: "Hue", saturation: "Saturation", color: "Color", luminosity: "Luminosity" };
+  const FONTS = ["Arial", "Segoe UI", "Helvetica", "Verdana", "Tahoma", "Trebuchet MS", "Georgia", "Times New Roman", "Garamond",
+                 "Courier New", "Consolas", "Impact", "Comic Sans MS"];
+  const KEEP = 40;  // ponytail: undo steps kept; painting copies the whole layer each step (store patches if memory bites)
+  let history = [null], labels = [""], pos = 0, live = null, active = null, nextId = 1, tool = "move", spaceDown = false;
+  let ks = 1, ox = 0, oy = 0, view = { k: 0 };  // screen px per image px and where the image sits; k 0 = fit on screen
+  let grab = null, draft = null, drag = null, pan = null, cropRatio = "", fmt = "png";
+  let mask = null, maskVer = 0, ants = null, pending = null, stroke = null, clipCopy = null;  // selection; a drag in progress
+  const opt = { marquee: "rect", grad: "linear", gradTo: "bg", shape: "rect", align: "left", bold: false, italic: false };
+  const work = $("#work");
+  const doc = () => live || history[pos];
+  const layer = (d = doc()) => d && (d.layers.find((l) => l.id === active) || d.layers.at(-1));
+  const clone = (d) => ({ ...d, layers: d.layers.map((l) => ({ ...l, adj: { ...l.adj }, t: l.t && { ...l.t }, shape: l.shape && { ...l.shape } })) });
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  const size = (n) => (n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+  const val = (id) => +$("#" + id).value;
+  const fg = () => $("#fg").value, bg = () => $("#bg").value;
+  const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+  const hex = (r, g, b) => "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+  const note = (msg, kind = "") => { $("#status").className = "status " + kind; $("#status").textContent = msg; };
+
+  function commit(d, label = "Edit") {
+    history = history.slice(0, pos + 1).concat([d]);
+    labels = labels.slice(0, pos + 1).concat([label]);
+    if (history.length > KEEP + 1) { history.splice(1, 1); labels.splice(1, 1); }
+    pos = history.length - 1;
+    live = null;
+    draw();
+  }
+  function change(fn, final = true, label) {  // edit a copy of the image: one undo step, or (final = false) a live preview
+    if (!history[pos]) return;
+    const d = clone(history[pos]), l = layer(d);
+    if (fn(d, l) === false) return;
+    if (final) commit(d, label); else { live = d; draw(); }
+  }
+  const onLayer = (fn, final, label) => change((d, l) => (l ? fn(l, d) : false), final, label);
+  const shift = (fn, final, label) => onLayer((l, d) => (l.locked ? false : fn(l, d)), final, label);  // a locked layer stays put
+
+  // ---- Documents and layers ----
+  const makeLayer = (name, src, d, s = 1) => ({ id: nextId++, name, src, w: src.width, h: src.height, x: d.w / 2, y: d.h / 2,
+    sx: s, sy: s, rot: 0, flipH: false, flipV: false, opacity: 1, visible: true, locked: false, blend: "source-over", kind: "pixel", adj: { ...ADJ } });
+  function insert(d, l) {  // above the selected layer, like Photoshop
+    const at = layer(d);
+    d.layers.splice(at ? d.layers.indexOf(at) + 1 : d.layers.length, 0, l);
+    active = l.id;
+  }
+  function solid(w, h, color) {
+    const c = new OffscreenCanvas(Math.max(1, Math.round(w)), Math.max(1, Math.round(h))), ctx = c.getContext("2d");
+    if (color) { ctx.fillStyle = color; ctx.fillRect(0, 0, c.width, c.height); }
+    return c;
+  }
+  const copyOf = (src) => { const c = solid(src.width, src.height); c.getContext("2d").drawImage(src, 0, 0); return c; };
+  function rasterize(l) { if (l.kind !== "pixel") { l.kind = "pixel"; l.t = l.shape = null; } }  // text / shapes become plain pixels
+  function renderText(t) {
+    const font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.size}px "${t.font}"`, lines = t.value.split("\n");
+    const c = document.createElement("canvas"), ctx = c.getContext("2d"), lh = t.size * 1.25, pad = Math.ceil(t.size * 0.2);
+    ctx.font = font;
+    c.width = Math.ceil(Math.max(1, ...lines.map((s) => ctx.measureText(s).width))) + pad * 2;
+    c.height = Math.ceil(lh * lines.length) + pad * 2;
+    Object.assign(ctx, { font, fillStyle: t.color, textBaseline: "middle", textAlign: t.align });
+    const x = t.align === "left" ? pad : t.align === "right" ? c.width - pad : c.width / 2;
+    lines.forEach((s, i) => ctx.fillText(s, x, pad + lh * (i + 0.5)));
+    return c;
+  }
+  function renderShape(s) {
+    const p = Math.ceil((s.stroke ? s.width : 0) / 2) + 1, c = solid(s.w + 2 * p, s.h + 2 * p), ctx = c.getContext("2d");
+    ctx.beginPath();
+    if (s.type === "ellipse") ctx.ellipse(c.width / 2, c.height / 2, s.w / 2, s.h / 2, 0, 0, 2 * Math.PI);
+    else if (s.type === "line") { ctx.moveTo(p, s.dir < 0 ? c.height - p : p); ctx.lineTo(c.width - p, s.dir < 0 ? p : c.height - p); }
+    else ctx.rect(p, p, s.w, s.h);
+    if (s.fill && s.type !== "line") { ctx.fillStyle = s.fill; ctx.fill(); }
+    if (s.stroke) Object.assign(ctx, { strokeStyle: s.stroke, lineWidth: s.width, lineCap: "round", lineJoin: "round" }).stroke();
+    return c;
+  }
+  function refresh(l) {  // text / shape layers: redraw from their settings; text keeps its left / center / right edge
+    const w0 = l.w, h0 = l.h;
+    l.src = l.kind === "text" ? renderText(l.t) : renderShape(l.shape);
+    l.w = l.src.width; l.h = l.src.height;
+    if (l.kind === "text") {
+      const dx = ({ left: 1, center: 0, right: -1 }[l.t.align] * (l.w - w0) * l.sx) / 2, dy = ((l.h - h0) * l.sy) / 2, t = (l.rot * Math.PI) / 180;
+      l.x += dx * Math.cos(t) - dy * Math.sin(t);
+      l.y += dx * Math.sin(t) + dy * Math.cos(t);
+    }
+  }
+  function open(d, label) {
+    history = [null, d]; labels = ["", label]; pos = 1; live = null; draft = null; view = { k: 0 }; tool = "move"; mask = null;
+    $("#load-error").textContent = "";
+    draw();
+  }
+  async function addFiles(files, paste = false) {  // the first image sets the canvas; more images become layers
+    const project = files.find((f) => f.name.endsWith(".mtimg"));
+    if (project) return openProject(project);
+    const imgs = [];
+    for (const f of files) {
+      if (!f.type.startsWith("image/")) continue;
+      try { imgs.push([f.name, await createImageBitmap(f)]); }
+      catch { $("#load-error").textContent = `✗ This browser can't open ${f.name}. Convert it to PNG in the Converter first.`; }
+    }
+    if (!imgs.length) return;
+    const fresh = !history[pos];
+    const d = fresh ? { w: imgs[0][1].width, h: imgs[0][1].height, dpi: 72, name: imgs[0][0], layers: [] } : clone(history[pos]);
+    for (const [name, src] of imgs) {
+      const l = makeLayer(paste ? "Pasted" : name, src, d, Math.min(1, d.w / src.width, d.h / src.height));  // big ones fitted
+      if (paste && clipCopy && src.width === clipCopy.w && src.height === clipCopy.h) Object.assign(l, { x: clipCopy.x + src.width / 2, y: clipCopy.y + src.height / 2, sx: 1, sy: 1 });
+      insert(d, l);
+    }
+    fresh ? open(d, "Open") : commit(d, paste ? "Paste" : "Add image");
+  }
+  // New project: size in pixels or print units at a resolution (ppi, saved into PNG / JPG exports), and a background
+  const PER_INCH = { in: 1, cm: 2.54, mm: 25.4 };
+  let ndUnit = "px", ndBg = "#ffffff";
+  function ndPixels() {
+    const dpi = clamp(Math.round(val("nd-dpi") || 72), 1, 2400), u = $("#nd-unit").value;
+    const px = (v) => clamp(Math.round(u === "px" ? v : (v / PER_INCH[u]) * dpi), 1, 16384);
+    return [px(val("nd-w") || 1), px(val("nd-h") || 1), dpi];
+  }
+  function ndShow() {
+    const [w, h, dpi] = ndPixels();
+    $("#nd-info").textContent = `${w} × ${h} px · ${dpi} ppi · ${((w / dpi) * 2.54).toFixed(1)} × ${((h / dpi) * 2.54).toFixed(1)} cm when printed`;
+    document.querySelectorAll("#nd-bg button").forEach((b) => (b.ariaPressed = String(b.dataset.bg === ndBg)));
+    $("#nd-color").parentElement.ariaPressed = String(ndBg === $("#nd-color").value);
+  }
+  $("#nd-unit").onchange = () => {  // the same size, written in the new unit
+    const u = $("#nd-unit").value;
+    $("#nd-unit").value = ndUnit;
+    const [w, h, dpi] = ndPixels(), to = (p) => (u === "px" ? p : +((p / dpi) * PER_INCH[u]).toFixed(2));
+    $("#nd-unit").value = ndUnit = u;
+    $("#nd-w").value = to(w);
+    $("#nd-h").value = to(h);
+    ndShow();
+  };
+  $("#nd-presets").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const [w, h, u, dpi] = b.dataset.p.split(" ");
+    $("#nd-unit").value = ndUnit = u;
+    $("#nd-w").value = w; $("#nd-h").value = h; $("#nd-dpi").value = dpi;
+    ndShow();
+  };
+  $("#nd-bg").onclick = (e) => { const b = e.target.closest("button"); if (b) { ndBg = b.dataset.bg; ndShow(); } };
+  $("#nd-color").oninput = () => { ndBg = $("#nd-color").value; ndShow(); };
+  for (const id of ["nd-w", "nd-h", "nd-dpi"]) $("#" + id).oninput = ndShow;
+  const newProject = () => {
+    if (doc() && !confirm("Start a new project? Changes you haven't saved are lost.")) return;
+    ndShow();
+    $("#new-dialog").showModal();
+  };
+  $("#new-project").onclick = $("#new-project2").onclick = newProject;
+  $("#new-dialog").addEventListener("close", () => {
+    if ($("#new-dialog").returnValue !== "ok") return;
+    const [w, h, dpi] = ndPixels(), d = { w, h, dpi, name: $("#nd-name").value.trim() || "Untitled", layers: [] };
+    d.layers.push(makeLayer(ndBg ? "Background" : "Layer 1", solid(w, h, ndBg), d));
+    active = d.layers[0].id;
+    open(d, "New project");
+  });
+  $("#new-layer").onclick = () => change((d) => insert(d, makeLayer(`Layer ${nextId}`, solid(d.w, d.h), d)), true, "New layer");
+
+  // ---- Drawing: the same code paints the screen (zoomed, panned) and the export (full size) ----
+  const filters = new Set();
+  function svgFilter(id, inner) {  // ponytail: filters are never removed; a session makes a few hundred at most
+    if (!filters.has(id)) {
+      filters.add(id);
+      $("#fx").insertAdjacentHTML("beforeend", `<filter id="${id}" color-interpolation-filters="sRGB">${inner}</filter>`);
+    }
+    return `url(#${id})`;
+  }
+  function curveTable(pts) {  // a smooth curve through the points that never overshoots (monotone cubic), as 256 values
+    const n = pts.length, d = [], m = [], t = [], out = [];
+    for (let i = 0; i < n - 1; i++) { d[i] = Math.max(1e-6, pts[i + 1][0] - pts[i][0]); m[i] = (pts[i + 1][1] - pts[i][1]) / d[i]; }
+    t[0] = m[0]; t[n - 1] = m[n - 2];
+    for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+    for (let i = 0; i < n - 1; i++) {
+      if (!m[i]) { t[i] = t[i + 1] = 0; continue; }
+      const a = t[i] / m[i], b = t[i + 1] / m[i], s = a * a + b * b;
+      if (s > 9) { t[i] = (3 * a * m[i]) / Math.sqrt(s); t[i + 1] = (3 * b * m[i]) / Math.sqrt(s); }
+    }
+    for (let v = 0, i = 0; v < 256; v++) {
+      while (i < n - 2 && v > pts[i + 1][0]) i++;
+      if (v <= pts[0][0]) { out.push(pts[0][1]); continue; }
+      if (v >= pts[n - 1][0]) { out.push(pts[n - 1][1]); continue; }
+      const h = d[i], s = (v - pts[i][0]) / h, s2 = s * s, s3 = s2 * s;
+      out.push(clamp((2 * s3 - 3 * s2 + 1) * pts[i][1] + (s3 - 2 * s2 + s) * h * t[i] + (-2 * s3 + 3 * s2) * pts[i + 1][1] + (s3 - s2) * h * t[i + 1], 0, 255));
+    }
+    return out;
+  }
+  function tone(a) {  // exposure (in linear light), levels and curves: one lookup table per color channel
+    if (!a.exposure && !a.black && a.white === 255 && a.gamma === 1 && !a.curve) return "";
+    const lin = (v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    const srgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
+    const span = Math.max(1, a.white - a.black), cv = a.curve && curveTable(a.curve), t = [];
+    for (let i = 0; i < 256; i++) {
+      const v = srgb(Math.min(1, lin(i / 255) * 2 ** a.exposure)) * 255, l = clamp((v - a.black) / span, 0, 1) ** (1 / a.gamma);
+      t.push((cv ? cv[Math.round(l * 255)] / 255 : l).toFixed(4));
+    }
+    const f = `type="table" tableValues="${t.join(" ")}"`;
+    return svgFilter(`tone_${a.exposure}_${a.black}_${a.white}_${a.gamma}_${a.curve || ""}`.replace(/\W/g, "_"),
+                     `<feComponentTransfer><feFuncR ${f}/><feFuncG ${f}/><feFuncB ${f}/></feComponentTransfer>`);
+  }
+  function filterFor(a, scale) {
+    const s = a.sharpen;
+    return [tone(a), a.brightness && `brightness(${1 + a.brightness / 100})`, a.contrast && `contrast(${100 + a.contrast}%)`,
+      a.saturation && `saturate(${100 + a.saturation}%)`, a.hue && `hue-rotate(${a.hue}deg)`, a.bw && "grayscale(1)",
+      a.invert && "invert(1)",
+      s && svgFilter(`sharp_${s}`.replace(/\W/g, "_"), `<feConvolveMatrix order="3" preserveAlpha="true" edgeMode="duplicate"
+        kernelMatrix="0 ${-s} 0 ${-s} ${1 + 4 * s} ${-s} 0 ${-s} 0"/>`),
+      a.blur && `blur(${a.blur * scale}px)`].filter(Boolean).join(" ") || "none";
+  }
+  const blocky = new WeakMap();
+  function source(l) {  // the layer's pixels, pixelated if asked (cached per size)
+    const p = Math.round(l.adj.pixelate);
+    if (p <= 1) return l.src;
+    const hit = blocky.get(l.src);
+    if (hit?.p === p) return hit.c;
+    const small = solid(l.w / p, l.h / p);
+    small.getContext("2d").drawImage(l.src, 0, 0, small.width, small.height);
+    const c = solid(l.w, l.h), ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, 0, 0, l.w, l.h);
+    blocky.set(l.src, { p, c });
+    return c;
+  }
+  const matrix = (l) => new DOMMatrix().translate(l.x, l.y).rotate(l.rot)  // layer pixels → image pixels
+    .scale(l.sx * (l.flipH ? -1 : 1), l.sy * (l.flipV ? -1 : 1)).translate(-l.w / 2, -l.h / 2);
+  const toLayer = (l, x, y) => { const p = matrix(l).inverse().transformPoint(new DOMPoint(x, y)); return [p.x, p.y]; };
+  function paint(ctx, d, scale, dx = 0, dy = 0) {
+    for (const l of d.layers) {
+      if (!l.visible) continue;
+      ctx.save();
+      ctx.setTransform(new DOMMatrix([scale, 0, 0, scale, dx, dy]).multiply(matrix(l)));
+      ctx.globalAlpha = l.opacity;
+      ctx.globalCompositeOperation = l.blend;
+      ctx.filter = filterFor(l.adj, scale);
+      ctx.drawImage(source(l), 0, 0, l.w, l.h);
+      ctx.restore();
+    }
+  }
+  function flat(d = doc()) {  // the whole picture as pixels (a page canvas: the SVG filters only work on those)
+    const c = document.createElement("canvas");
+    c.width = d.w; c.height = d.h;
+    paint(c.getContext("2d"), d, 1);
+    return c;
+  }
+
+  function antsCanvas(d) {  // the selection's edge, black and white dashes, at screen size (or image size when zoomed in)
+    const k = Math.min(1, ks), W = Math.max(1, Math.round(d.w * k)), H = Math.max(1, Math.round(d.h * k)), key = `${maskVer}:${W}`;
+    if (ants?.key === key) return ants.c;
+    const m = solid(W, H), mc = m.getContext("2d");
+    mc.drawImage(mask.c, 0, 0, W, H);
+    const a = mc.getImageData(0, 0, W, H).data, out = new ImageData(W, H), o = out.data, on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && a[(y * W + x) * 4 + 3] > 127;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!on(x, y) || (on(x - 1, y) && on(x + 1, y) && on(x, y - 1) && on(x, y + 1))) continue;
+      const i = (y * W + x) * 4, c = ((x + y) >> 2) & 1 ? 255 : 0;
+      o[i] = o[i + 1] = o[i + 2] = c; o[i + 3] = 255;
+    }
+    mc.clearRect(0, 0, W, H);
+    mc.putImageData(out, 0, 0);
+    ants = { key, c: m };
+    return m;
+  }
+  function draw() {
+    const d = doc();
+    document.body.classList.toggle("nodoc", !d);
+    if (!d) return panels(null, null);
+    if (mask && (mask.c.width !== d.w || mask.c.height !== d.h)) mask = null;  // the canvas changed size: the selection goes
+    const W = work.clientWidth, H = work.clientHeight, dpr = devicePixelRatio || 1, c = $("#canvas");
+    if (view.k) ({ k: ks, ox, oy } = view);
+    else { ks = Math.min((W - 48) / d.w, (H - 48) / d.h); ox = (W - d.w * ks) / 2; oy = (H - d.h * ks) / 2; }
+    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+    const ctx = c.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox * dpr, oy * dpr, d.w * ks * dpr, d.h * ks * dpr);  // nothing shows off the canvas
+    ctx.clip();
+    paint(ctx, d, ks * dpr, ox * dpr, oy * dpr);
+    ctx.restore();
+    if (mask) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(antsCanvas(d), ox * dpr, oy * dpr, d.w * ks * dpr, d.h * ks * dpr);
+      ctx.imageSmoothingEnabled = true;
+    }
+    if (pending?.path) {  // a selection being drawn, or a gradient being dragged
+      ctx.setTransform(ks * dpr, 0, 0, ks * dpr, ox * dpr, oy * dpr);
+      ctx.lineWidth = 1 / ks;
+      for (const [color, dash] of [["#000", 0], ["#fff", 4 / ks]]) {
+        ctx.strokeStyle = color;
+        ctx.setLineDash([4 / ks, 4 / ks]);
+        ctx.lineDashOffset = dash;
+        ctx.stroke(pending.path);
+      }
+      ctx.setLineDash([]);
+    }
+    const rect = { left: ox + "px", top: oy + "px", width: d.w * ks + "px", height: d.h * ks + "px" };
+    Object.assign($("#paper").style, rect);
+    Object.assign($("#crop-area").style, rect);
+    work.dataset.tool = spaceDown || pan ? "hand" : tool;
+    const sel = $("#sel"), l = layer(d);
+    sel.hidden = tool !== "move" || !l || !l.visible;
+    if (!sel.hidden) {
+      const w = l.w * l.sx * ks, h = l.h * l.sy * ks;
+      sel.classList.toggle("locked", l.locked);
+      Object.assign(sel.style, { width: w + "px", height: h + "px", left: ox + l.x * ks - w / 2 + "px", top: oy + l.y * ks - h / 2 + "px",
+                                 transform: `rotate(${l.rot}deg)` });
+    }
+    drawBox();
+    panels(d, l);
+  }
+
+  // ---- Panels ----
+  const thumbs = new WeakMap();
+  let listKey = "", histKey = "";
+  function thumb(src) {
+    let t = thumbs.get(src);
+    if (!t) {
+      const c = document.createElement("canvas"), k = Math.min(80 / src.width, 80 / src.height, 1);
+      c.width = Math.max(1, Math.round(src.width * k));
+      c.height = Math.max(1, Math.round(src.height * k));
+      c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+      thumbs.set(src, (t = { url: c.toDataURL(), n: (thumbs.n = (thumbs.n || 0) + 1) }));
+    }
+    return t;
+  }
+  function layerList(d, l) {  // rebuilt only when something in it changed (not on every drag step)
+    const key = d ? `${l?.id}|` + d.layers.map((x) => `${x.id}:${x.name}:${x.visible}:${x.locked}:${x.kind}:${thumb(x.src).n}`).join(",") : "";
+    if (key === listKey || $("#layers input")) return;
+    listKey = key;
+    $("#layers").replaceChildren(...(d ? [...d.layers].reverse() : []).map((x) => {
+      const li = Object.assign(document.createElement("li"), { className: x === l ? "on" : "", draggable: true });
+      li.dataset.id = x.id;
+      const eye = Object.assign(document.createElement("button"), { type: "button", className: "eye", textContent: x.visible ? "👁" : "" });
+      eye.ariaLabel = (x.visible ? "Hide " : "Show ") + x.name;
+      eye.ariaPressed = String(x.visible);
+      const img = Object.assign(document.createElement("img"), { className: "lt", src: thumb(x.src).url, alt: "", draggable: false });
+      li.append(eye, img, Object.assign(document.createElement("span"), { className: "name", textContent: x.name, title: "Double-click to rename" }));
+      if (x.kind !== "pixel") li.append(Object.assign(document.createElement("span"), { className: "kind", textContent: x.kind === "text" ? "T" : "◆", title: x.kind }));
+      if (x.locked) li.append(Object.assign(document.createElement("span"), { className: "lk", textContent: "locked", title: "Position locked" }));
+      return li;
+    }));
+  }
+  function historyList() {
+    const key = `${pos}|${labels.join(",")}`;
+    if (key === histKey) return;
+    histKey = key;
+    $("#hist").replaceChildren(...labels.slice(1).map((t, i) => {
+      const li = Object.assign(document.createElement("li"), { textContent: t, className: i + 1 === pos ? "on" : i + 1 > pos ? "future" : "" });
+      li.dataset.i = i + 1;
+      return li;
+    }));
+    $("#hist .on")?.scrollIntoView({ block: "nearest" });
+  }
+  const BARS = { move: "move", crop: "crop", hand: "hand", zoom: "zoom", marquee: "select", lasso: "select", wand: "select", brush: "paint",
+                 eraser: "paint", bucket: "bucket", gradient: "gradient", eyedropper: "pick", text: "text", shape: "shape" };
+  function panels(d, l) {
+    layerList(d, l);
+    historyList();
+    const typed = (id, v) => { const el = $("#" + id); if (document.activeElement !== el) el.value = v; };
+    document.querySelectorAll(".slide input[data-k]").forEach((inp) => {
+      const k = inp.dataset.k, v = l ? (k === "opacity" ? Math.round(l.opacity * 100) : l.adj[k]) : inp.defaultValue;
+      if (document.activeElement !== inp) inp.value = v;
+      inp.nextElementSibling.textContent = inp.value;
+      inp.disabled = !l;
+    });
+    document.querySelectorAll(".options .slide input").forEach((inp) => (inp.nextElementSibling.textContent = inp.value));
+    $("#blend").value = l?.blend || "source-over";
+    const press = (id, on) => ($("#" + id).ariaPressed = String(!!on));
+    press("lock-btn", l?.locked);
+    press("bw", l?.adj.bw); press("invert", l?.adj.invert); press("flip-h", l?.flipH); press("flip-v", l?.flipV);
+    document.querySelectorAll(".side button, .side input, .side select, #undo, #redo, #close, #export, #save-project, #new-layer")
+      .forEach((el) => (el.disabled = !d || (!l && el.closest("details:nth-of-type(-n+4), .layer-top")) ||
+                                     (!l && ["dup", "del", "merge", "lock-btn"].includes(el.id))));
+    $("#rasterize").disabled = !l || l.kind === "pixel";
+    if (l) {
+      typed("px", Math.round(l.x - (l.w * l.sx) / 2)); typed("py", Math.round(l.y - (l.h * l.sy) / 2));
+      typed("pw", Math.round(l.w * l.sx)); typed("ph", Math.round(l.h * l.sy)); typed("angle", Math.round(l.rot * 10) / 10);
+    }
+    if (d) { typed("iw", d.w); typed("ih", d.h); typed("rw", d.w); typed("rh", d.h); typed("rp", 100); }
+    const t = spaceDown || pan ? "hand" : tool;
+    document.querySelectorAll("#tools button[data-t]").forEach((b) => (b.ariaPressed = String(b.dataset.t === t)));
+    document.querySelectorAll("#options > div").forEach((bar) => (bar.hidden = bar.id !== "opt-" + BARS[t]));
+    document.querySelectorAll("#opt-select [data-for]").forEach((el) => (el.hidden = el.dataset.for !== t));
+    for (const id of ["sel-none", "sel-inv", "sel-crop", "sel-copy", "sel-cut", "sel-layer", "sel-del"]) $("#" + id).disabled = !mask;
+    const pressAll = (sel, key, v) => document.querySelectorAll(sel + " button").forEach((b) => (b.ariaPressed = String(b.dataset[key] === v)));
+    pressAll("#ratios", "r", cropRatio); pressAll("#formats", "f", fmt); pressAll("#marquee-shape", "m", opt.marquee);
+    pressAll("#g-type", "g", opt.grad); pressAll("#g-to", "to", opt.gradTo); pressAll("#sh-type", "s", opt.shape);
+    const tx = l?.kind === "text" ? l.t : null, sh = l?.kind === "shape" ? l.shape : null;
+    if (tx) { $("#tx-font").value = tx.font; typed("tx-size", tx.size); typed("tx-color", tx.color); typed("tx-value", tx.value); opt.bold = tx.bold; opt.italic = tx.italic; opt.align = tx.align; }
+    else if (document.activeElement !== $("#tx-value")) $("#tx-value").value = "";
+    press("tx-bold", opt.bold); press("tx-italic", opt.italic); pressAll("#tx-align", "a", opt.align);
+    if (sh) { $("#sh-fill-on").checked = !!sh.fill; $("#sh-stroke-on").checked = !!sh.stroke; typed("sh-width", sh.width);
+              if (sh.fill) typed("sh-fill", sh.fill); if (sh.stroke) typed("sh-stroke", sh.stroke); }
+    for (const id of ["fg", "bg"]) $("#" + id).parentElement.style.background = $("#" + id).value;
+    $("#q-row").hidden = fmt === "png";
+    $("#q-row output").textContent = $("#quality").value;
+    $("#zoom-fit").textContent = d ? `${Math.round(ks * 100)}%` : "100%";
+    $("#readout").textContent = d ? `${d.w} × ${d.h} px · ${d.dpi} ppi · ${d.layers.length} layer${d.layers.length === 1 ? "" : "s"}`
+      + (mask ? ` · selection ${mask.b.w} × ${mask.b.h}` : "") : "";
+    $("#undo").disabled = pos <= 1;  // step 1 is the opened image
+    $("#redo").disabled = pos === history.length - 1;
+    drawCurve(l);
+  }
+
+  // ---- Zoom and pan ----
+  function zoomTo(k, mx = work.clientWidth / 2, my = work.clientHeight / 2) {  // keeps the point under the mouse in place
+    if (!doc()) return;
+    const nk = clamp(k, 0.02, 32);
+    view = { k: nk, ox: mx - ((mx - ox) * nk) / ks, oy: my - ((my - oy) * nk) / ks };
+    draw();
+  }
+  const at = (e) => { const b = work.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  const docPt = (e) => { const [mx, my] = at(e); return [(mx - ox) / ks, (my - oy) / ks]; };
+  work.addEventListener("wheel", (e) => { if (!doc()) return; e.preventDefault(); zoomTo(ks * (e.deltaY < 0 ? 1.15 : 1 / 1.15), ...at(e)); }, { passive: false });
+  $("#zoom-in").onclick = () => zoomTo(ks * 1.25);
+  $("#zoom-out").onclick = () => zoomTo(ks / 1.25);
+  $("#zoom-fit").onclick = () => { view = { k: 0 }; draw(); };
+
+  // ---- Selections: a mask the size of the canvas (its alpha is what's selected) ----
+  function bounds(c) {
+    const { width: w, height: h } = c, a = c.getContext("2d").getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (a[(y * w + x) * 4 + 3] > 127) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  function setMask(c) {
+    const b = c && bounds(c);
+    mask = b ? { c, b } : null;
+    maskVer++;
+    draw();
+  }
+  function combine(drawIt, mode) {  // new, add (Shift), remove (Alt) or overlap (Shift+Alt)
+    const d = doc(), c = solid(d.w, d.h), ctx = c.getContext("2d");
+    if (mask && mode !== "new") ctx.drawImage(mask.c, 0, 0);
+    ctx.globalCompositeOperation = { new: "source-over", add: "source-over", sub: "destination-out", and: "destination-in" }[mode];
+    ctx.fillStyle = "#000";
+    drawIt(ctx);
+    setMask(c);
+  }
+  const modeOf = (e) => (e.shiftKey && e.altKey ? "and" : e.shiftKey ? "add" : e.altKey ? "sub" : "new");
+  function flood(img, sx, sy, tol, touching) {  // pixels like the one at (sx, sy): 1 = in
+    const { width: w, height: h, data } = img, out = new Uint8Array(w * h), i0 = (sy * w + sx) * 4;
+    const near = (p) => { const i = p * 4; return Math.abs(data[i] - data[i0]) <= tol && Math.abs(data[i + 1] - data[i0 + 1]) <= tol
+                                              && Math.abs(data[i + 2] - data[i0 + 2]) <= tol && Math.abs(data[i + 3] - data[i0 + 3]) <= tol; };
+    if (!touching) { for (let p = 0; p < w * h; p++) out[p] = near(p) ? 1 : 0; return out; }
+    const stack = [sy * w + sx];
+    out[stack[0]] = 1;
+    while (stack.length) {
+      const p = stack.pop(), x = p % w;
+      if (x > 0 && !out[p - 1] && near(p - 1)) { out[p - 1] = 1; stack.push(p - 1); }
+      if (x < w - 1 && !out[p + 1] && near(p + 1)) { out[p + 1] = 1; stack.push(p + 1); }
+      if (p >= w && !out[p - w] && near(p - w)) { out[p - w] = 1; stack.push(p - w); }
+      if (p < w * (h - 1) && !out[p + w] && near(p + w)) { out[p + w] = 1; stack.push(p + w); }
+    }
+    return out;
+  }
+  function bitsCanvas(bits, w, h, color = "#000000") {
+    const img = new ImageData(w, h), n = parseInt(color.slice(1), 16), c = solid(w, h);
+    for (let p = 0; p < bits.length; p++) if (bits[p]) img.data.set([n >> 16, (n >> 8) & 255, n & 255, 255], p * 4);
+    c.getContext("2d").putImageData(img, 0, 0);
+    return c;
+  }
+  function maskFor(l) {  // the selection in the layer's own pixels (null: no selection)
+    if (!mask) return null;
+    const c = solid(l.w, l.h), ctx = c.getContext("2d");
+    ctx.setTransform(matrix(l).inverse());
+    ctx.drawImage(mask.c, 0, 0);
+    return c;
+  }
+  function clipTo(c, m) {
+    if (!m) return c;
+    const ctx = c.getContext("2d");
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(m, 0, 0);
+    ctx.restore();
+    return c;
+  }
+  const selectAll = () => { const d = doc(); setMask(solid(d.w, d.h, "#000")); };
+  function invertMask() {
+    const d = doc(), c = solid(d.w, d.h, "#000"), ctx = c.getContext("2d");
+    if (mask) { ctx.globalCompositeOperation = "destination-out"; ctx.drawImage(mask.c, 0, 0); }
+    setMask(c);
+  }
+  function copyRegion() {  // the selected part of the selected layer, as it looks on the canvas
+    const d = doc(), l = layer(d);
+    if (!l) return null;
+    const full = flat({ ...d, layers: [{ ...l, visible: true, opacity: 1, blend: "source-over" }] }), b = mask ? mask.b : { x: 0, y: 0, w: d.w, h: d.h };
+    clipTo(full, mask?.c);
+    const c = solid(b.w, b.h);
+    c.getContext("2d").drawImage(full, -b.x, -b.y);
+    return { c, ...b };
+  }
+  async function copy() {
+    const r = copyRegion();
+    if (!r) return false;
+    clipCopy = r;
+    try {
+      const blob = await r.c.convertToBlob({ type: "image/png" });
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      note(`copied ${r.w} × ${r.h} px · Ctrl+V pastes it as a new layer, in place`);
+    } catch { note("copied · Ctrl+V pastes it here (the system clipboard didn't take it)"); }
+    return true;
+  }
+  const clearSelected = (label) => onLayer((l) => {  // what's selected on the layer becomes see-through
+    rasterize(l);
+    const c = copyOf(l.src), ctx = c.getContext("2d");
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.drawImage(maskFor(l), 0, 0);
+    l.src = c;
+  }, true, label);
+  function layerViaCopy() {
+    const r = copyRegion();
+    if (!r) return;
+    change((d) => insert(d, Object.assign(makeLayer(layer(d).name + " (part)", r.c, d), { x: r.x + r.w / 2, y: r.y + r.h / 2 })), true, "Layer via copy");
+  }
+  function fillForeground() {
+    onLayer((l) => {
+      rasterize(l);
+      const c = copyOf(l.src), f = clipTo(solid(l.w, l.h, fg()), maskFor(l));
+      c.getContext("2d").drawImage(f, 0, 0);
+      l.src = c;
+    }, true, "Fill");
+  }
+  $("#sel-all").onclick = selectAll;
+  $("#sel-none").onclick = () => setMask(null);
+  $("#sel-inv").onclick = invertMask;
+  $("#sel-crop").onclick = () => { const b = mask.b; cropTo(b, "Crop to selection"); };
+  $("#sel-copy").onclick = copy;
+  $("#sel-cut").onclick = async () => { if (await copy()) clearSelected("Cut"); };
+  $("#sel-layer").onclick = layerViaCopy;
+  $("#sel-del").onclick = () => clearSelected("Delete pixels");
+  $("#marquee-shape").onclick = (e) => { const b = e.target.closest("button"); if (b) { opt.marquee = b.dataset.m; draw(); } };
+
+  // ---- Painting: brush and eraser stamp soft dots onto a copy of the layer; one stroke is one undo step ----
+  function startStroke(e, erase) {
+    const d = clone(history[pos]), l = layer(d);
+    if (!l || !l.visible) return note("Pick a visible layer to paint on", "err");
+    rasterize(l);
+    const base = copyOf(l.src);
+    stroke = { d, l, base, dab: solid(l.w, l.h), tmp: solid(l.w, l.h), out: solid(l.w, l.h), clip: maskFor(l), erase, last: null,
+               r: Math.max(0.5, val("b-size") / 2 / ((l.sx + l.sy) / 2)), alpha: val("b-opac") / 100 };
+    l.src = stroke.out;
+    dabTo(docPt(e));
+  }
+  function dabTo([x, y]) {
+    const s = stroke, [lx, ly] = toLayer(s.l, x, y), ctx = s.dab.getContext("2d"), color = s.erase ? "#000000" : fg();
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s.r);
+    g.addColorStop(0, color);
+    g.addColorStop(clamp(val("b-hard") / 100, 0, 0.99), color);
+    g.addColorStop(1, rgba(color, 0));
+    ctx.fillStyle = g;
+    const [px, py] = s.last || [lx, ly], n = Math.max(1, Math.ceil(Math.hypot(lx - px, ly - py) / Math.max(0.5, s.r * 0.25)));
+    for (let i = s.last ? 1 : 0; i <= n; i++) {
+      ctx.setTransform(1, 0, 0, 1, px + ((lx - px) * i) / n, py + ((ly - py) * i) / n);
+      ctx.beginPath();
+      ctx.arc(0, 0, s.r, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    s.last = [lx, ly];
+    const t = s.tmp.getContext("2d"), o = s.out.getContext("2d");  // the stroke at its opacity, inside the selection
+    t.clearRect(0, 0, s.tmp.width, s.tmp.height);
+    t.drawImage(s.dab, 0, 0);
+    clipTo(s.tmp, s.clip);
+    o.globalCompositeOperation = "copy";
+    o.drawImage(s.base, 0, 0);
+    o.globalAlpha = s.alpha;
+    o.globalCompositeOperation = s.erase ? "destination-out" : "source-over";
+    o.drawImage(s.tmp, 0, 0);
+    o.globalAlpha = 1;
+    live = s.d;
+    draw();
+  }
+  function pick([x, y], toBg) {  // the color you see at that spot
+    const d = doc(), px = clamp(Math.floor(x), 0, d.w - 1), py = clamp(Math.floor(y), 0, d.h - 1);
+    const [r, g, b] = flat(d).getContext("2d").getImageData(px, py, 1, 1).data;
+    $(toBg ? "#bg" : "#fg").value = hex(r, g, b);
+    draw();
+  }
+  function bucket([x, y]) {
+    onLayer((l) => {
+      const [lx, ly] = toLayer(l, x, y).map(Math.floor);
+      if (lx < 0 || ly < 0 || lx >= l.w || ly >= l.h) return false;
+      rasterize(l);
+      const base = copyOf(l.src), img = base.getContext("2d").getImageData(0, 0, l.w, l.h);
+      const f = clipTo(bitsCanvas(flood(img, lx, ly, val("f-tol") * 2.55, $("#f-contig").checked), l.w, l.h, fg()), maskFor(l));
+      base.getContext("2d").drawImage(f, 0, 0);
+      l.src = base;
+    }, true, "Paint bucket");
+  }
+  function gradientTo(b) {  // fills the layer (inside the selection) from where the drag began to b
+    const g0 = pending, l = g0.l, [ax, ay] = toLayer(l, ...g0.a), [bx, by] = toLayer(l, ...b), out = copyOf(g0.base), f = solid(l.w, l.h), fc = f.getContext("2d");
+    const grad = opt.grad === "radial" ? fc.createRadialGradient(ax, ay, 0, ax, ay, Math.hypot(bx - ax, by - ay) || 1) : fc.createLinearGradient(ax, ay, bx, by);
+    grad.addColorStop(0, fg());
+    grad.addColorStop(1, opt.gradTo === "bg" ? bg() : rgba(fg(), 0));
+    fc.fillStyle = grad;
+    fc.fillRect(0, 0, l.w, l.h);
+    out.getContext("2d").drawImage(clipTo(f, g0.clip), 0, 0);
+    l.src = out;
+    g0.path = new Path2D(`M${g0.a[0]} ${g0.a[1]}L${b[0]} ${b[1]}`);
+    live = g0.d;
+    draw();
+  }
+  $("#b-size").oninput = $("#b-hard").oninput = $("#b-opac").oninput = $("#w-tol").oninput = $("#f-tol").oninput = () => draw();
+  $("#g-type").onclick = (e) => { const b = e.target.closest("button"); if (b) { opt.grad = b.dataset.g; draw(); } };
+  $("#g-to").onclick = (e) => { const b = e.target.closest("button"); if (b) { opt.gradTo = b.dataset.to; draw(); } };
+  $("#fg").oninput = $("#bg").oninput = () => draw();
+  $("#swap").onclick = () => { [$("#fg").value, $("#bg").value] = [bg(), fg()]; draw(); };
+
+  // ---- Text and shapes: layers drawn from their settings, so they stay editable ----
+  $("#tx-font").append(...FONTS.map((f) => new Option(f, f)));
+  const textOpts = () => ({ font: $("#tx-font").value, size: clamp(val("tx-size") || 72, 4, 2000), bold: opt.bold, italic: opt.italic,
+                            align: opt.align, color: $("#tx-color").value });
+  const onText = (fn, final = true) => onLayer((l) => { if (l.kind !== "text") return false; fn(l.t); refresh(l); }, final, "Edit text");
+  function textAt(e) {
+    const [x, y] = docPt(e), hit = hitTest(e);
+    if (hit?.kind === "text") { active = hit.id; draw(); }
+    else change((d) => {
+      const t = { value: "Text", ...textOpts() }, l = makeLayer("Text", renderText(t), d);
+      Object.assign(l, { kind: "text", t, x: x + l.w / 2, y });
+      insert(d, l);
+    }, true, "Text");
+    setTimeout(() => { $("#tx-value").focus(); $("#tx-value").select(); });
+  }
+  $("#tx-value").oninput = () => onText((t) => (t.value = $("#tx-value").value || " "), false);
+  $("#tx-value").onchange = () => onText((t) => (t.value = $("#tx-value").value || " "));
+  $("#tx-font").onchange = () => onText((t) => (t.font = $("#tx-font").value));
+  $("#tx-size").onchange = () => onText((t) => (t.size = textOpts().size));
+  $("#tx-color").onchange = () => onText((t) => (t.color = $("#tx-color").value));
+  $("#tx-bold").onclick = () => { opt.bold = !opt.bold; onText((t) => (t.bold = opt.bold)); draw(); };
+  $("#tx-italic").onclick = () => { opt.italic = !opt.italic; onText((t) => (t.italic = opt.italic)); draw(); };
+  $("#tx-align").onclick = (e) => { const b = e.target.closest("button"); if (b) { opt.align = b.dataset.a; onText((t) => (t.align = opt.align)); draw(); } };
+  const shapeOpts = () => ({ fill: $("#sh-fill-on").checked ? $("#sh-fill").value : null, width: clamp(val("sh-width") || 1, 1, 200),
+                             stroke: $("#sh-stroke-on").checked || opt.shape === "line" ? $("#sh-stroke").value : null });
+  const onShape = () => onLayer((l) => { if (l.kind !== "shape") return false; l.shape = { ...l.shape, ...shapeOpts(), ...(l.shape.type === "line" ? { fill: null } : {}) }; refresh(l); }, true, "Edit shape");
+  for (const id of ["sh-fill-on", "sh-fill", "sh-stroke-on", "sh-stroke", "sh-width"]) $("#" + id).onchange = onShape;
+  $("#sh-type").onclick = (e) => { const b = e.target.closest("button"); if (b) { opt.shape = b.dataset.s; draw(); } };
+  function shapeTo(b, square) {
+    const s0 = pending, [ax, ay] = s0.a;
+    let w = b[0] - ax, h = b[1] - ay;
+    if (square && opt.shape !== "line") { const m = Math.max(Math.abs(w), Math.abs(h)); w = Math.sign(w || 1) * m; h = Math.sign(h || 1) * m; }
+    if (square && opt.shape === "line") {  // 45° steps
+      const len = Math.hypot(w, h), a = Math.round(Math.atan2(h, w) / (Math.PI / 4)) * (Math.PI / 4);
+      w = len * Math.cos(a); h = len * Math.sin(a);
+    }
+    const s = { type: opt.shape, w: Math.max(1, Math.abs(w)), h: Math.max(opt.shape === "line" ? 0 : 1, Math.abs(h)), dir: Math.sign(w * h) || 1, ...shapeOpts() };
+    const d = clone(history[pos]), l = { ...makeLayer("Shape", renderShape(s), d), id: s0.id, kind: "shape", shape: s, x: ax + w / 2, y: ay + h / 2 };
+    d.layers.splice(s0.at, 0, l);
+    active = s0.id;
+    s0.big = Math.hypot(w, h) > 2;
+    live = d;
+    draw();
+  }
+
+  // ---- Pointer on the workspace ----
+  function hitTest(e) {  // the topmost visible layer under the pointer
+    const [px, py] = docPt(e);
+    return [...doc().layers].reverse().find((l) => {
+      const [lx, ly] = toLayer(l, px, py);
+      return l.visible && lx >= 0 && ly >= 0 && lx <= l.w && ly <= l.h;
+    });
+  }
+  work.addEventListener("pointerdown", (e) => {
+    if (!doc() || e.target.closest(".start")) return;
+    const pt = docPt(e);
+    if (e.button === 1 || (e.button === 0 && (tool === "hand" || spaceDown))) {
+      view = { k: ks, ox, oy };
+      pan = { x0: e.clientX, y0: e.clientY, ox, oy };
+    } else if (e.button !== 0) return;
+    else if (tool === "zoom") return zoomTo(ks * (e.altKey ? 0.5 : 2), ...at(e));
+    else if (tool === "crop") cropDown(e);
+    else if (tool === "eyedropper" || ((tool === "brush" || tool === "eraser") && e.altKey)) return pick(pt, tool === "eyedropper" && e.altKey);
+    else if (tool === "brush" || tool === "eraser") startStroke(e, tool === "eraser");
+    else if (tool === "bucket") return bucket(pt);
+    else if (tool === "text") return textAt(e);
+    else if (tool === "wand") {
+      const d = doc(), [x, y] = pt.map(Math.floor);
+      if (x < 0 || y < 0 || x >= d.w || y >= d.h) return;
+      const bits = flood(flat(d).getContext("2d").getImageData(0, 0, d.w, d.h), x, y, val("w-tol") * 2.55, $("#w-contig").checked);
+      return combine((ctx) => ctx.drawImage(bitsCanvas(bits, d.w, d.h), 0, 0), modeOf(e));
+    } else if (tool === "marquee" || tool === "lasso") pending = { a: pt, pts: [pt], mode: modeOf(e) };
+    else if (tool === "gradient") {
+      const d = clone(history[pos]), l = layer(d);
+      if (!l) return;
+      rasterize(l);
+      pending = { a: pt, d, l, base: copyOf(l.src), clip: maskFor(l) };
+    } else if (tool === "shape") {
+      const d = history[pos], at_ = layer(d);
+      pending = { a: pt, id: nextId++, at: at_ ? d.layers.indexOf(at_) + 1 : d.layers.length };
+    } else {  // move
+      if (!e.target.closest("#sel")) {
+        const hit = hitTest(e);
+        if (!hit) return;
+        active = hit.id;
+        draw();
+      }
+      if (layer().locked) return;
+      const b = $("#sel").getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      grab = { mode: e.target.classList.contains("spin") ? "turn" : e.target.dataset.s ? "scale" : "move",
+               x0: e.clientX, y0: e.clientY, cx, cy, d0: Math.hypot(e.clientX - cx, e.clientY - cy) || 1, l0: { ...layer() } };
+    }
+    work.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  work.addEventListener("pointermove", (e) => {
+    const ring = $("#ring"), paintTool = (tool === "brush" || tool === "eraser") && doc() && !spaceDown;
+    ring.hidden = !paintTool;
+    if (paintTool) {  // the brush's outline follows the pointer
+      const [mx, my] = at(e), r = val("b-size") * ks;
+      Object.assign(ring.style, { left: mx + "px", top: my + "px", width: r + "px", height: r + "px" });
+    }
+    if (pan) { view = { k: ks, ox: pan.ox + e.clientX - pan.x0, oy: pan.oy + e.clientY - pan.y0 }; return draw(); }
+    if (drag) return cropMove(e);
+    if (stroke) return dabTo(docPt(e));
+    if (pending) {
+      const [x, y] = docPt(e), p = pending;
+      if (tool === "gradient") return gradientTo([x, y]);
+      if (tool === "shape") return shapeTo([x, y], e.shiftKey);
+      if (tool === "lasso") { p.pts.push([x, y]); p.path = new Path2D("M" + p.pts.map((q) => q.join(" ")).join("L") + "Z"); }
+      else {
+        const [ax, ay] = p.a, path = new Path2D();
+        if (opt.marquee === "ellipse") path.ellipse((ax + x) / 2, (ay + y) / 2, Math.abs(x - ax) / 2, Math.abs(y - ay) / 2, 0, 0, 2 * Math.PI);
+        else path.rect(Math.min(ax, x), Math.min(ay, y), Math.abs(x - ax), Math.abs(y - ay));
+        p.path = path;
+        p.big = Math.abs(x - ax) > 1 && Math.abs(y - ay) > 1;
+      }
+      return draw();
+    }
+    if (!grab) return;
+    const g = grab, l0 = g.l0;
+    shift((l) => {
+      if (g.mode === "move") { l.x = l0.x + (e.clientX - g.x0) / ks; l.y = l0.y + (e.clientY - g.y0) / ks; }
+      else if (g.mode === "scale") {
+        const s = Math.max(0.01, Math.hypot(e.clientX - g.cx, e.clientY - g.cy) / g.d0);
+        l.sx = l0.sx * s; l.sy = l0.sy * s;
+      } else {
+        let deg = ((Math.atan2(e.clientY - g.cy, e.clientX - g.cx) * 180) / Math.PI + 90 + 360) % 360;
+        if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+        else for (const snap of [0, 90, 180, 270, 360]) if (Math.abs(deg - snap) < 4) deg = snap;  // straight is easy to hit
+        l.rot = Math.round((deg % 360) * 10) / 10;
+      }
+    }, false);
+  });
+  work.addEventListener("pointerleave", () => ($("#ring").hidden = true));
+  work.addEventListener("pointerup", () => {
+    if (pan) { pan = null; return draw(); }
+    if (drag) return cropUp();
+    if (stroke) { const s = stroke; stroke = null; thumbs.delete(s.out); return commit(s.d, s.erase ? "Eraser" : "Brush"); }
+    if (pending) {
+      const p = pending;
+      pending = null;
+      if (tool === "gradient") return p.path ? (thumbs.delete(p.l.src), commit(p.d, "Gradient")) : draw();
+      if (tool === "shape") return p.big ? commit(live, "Shape") : ((live = null), draw());
+      if (tool === "lasso" && p.pts.length > 2) return combine((ctx) => ctx.fill(p.path), p.mode);
+      if (tool === "marquee" && p.big) return combine((ctx) => ctx.fill(p.path), p.mode);
+      if (p.mode === "new") setMask(null);  // a click without a drag deselects, like Photoshop
+      return draw();
+    }
+    if (grab && live) {
+      const l = layer(live);  // text and shapes take on their new size, so they stay crisp
+      if (grab.mode === "scale" && l.kind === "text") { l.t = { ...l.t, size: Math.max(4, Math.round(l.t.size * l.sx)) }; l.sx = l.sy = 1; refresh(l); }
+      if (grab.mode === "scale" && l.kind === "shape") { l.shape = { ...l.shape, w: l.shape.w * l.sx, h: l.shape.h * l.sy }; l.sx = l.sy = 1; refresh(l); }
+      commit(live, { move: "Move", scale: "Resize", turn: "Rotate" }[grab.mode]);
+    }
+    grab = null;
+  });
+  work.addEventListener("dblclick", (e) => {
+    if (tool !== "move" || !doc()) return;
+    const hit = hitTest(e);
+    if (hit?.kind === "text") { active = hit.id; setTool("text"); $("#tx-value").focus(); }
+  });
+
+  // ---- Crop tool: a box on the canvas (image pixels); Apply (Enter) makes it the new canvas ----
+  const docAt = (e) => { const [x, y] = docPt(e), d = doc(); return [clamp(x, 0, d.w), clamp(y, 0, d.h)]; };
+  function cropDown(e) {
+    const [x, y] = docAt(e), corner = e.target.dataset.h;
+    if (corner) drag = { ax: corner.includes("w") ? draft.x + draft.w : draft.x, ay: corner.includes("n") ? draft.y + draft.h : draft.y };
+    else if (e.target.id === "box") drag = { move: true, dx: x - draft.x, dy: y - draft.y };
+    else { drag = { ax: x, ay: y }; draft = { x, y, w: 0, h: 0 }; }
+  }
+  function cropMove(e) {
+    const [x, y] = docAt(e), d = doc();
+    if (drag.move) {
+      draft.x = clamp(x - drag.dx, 0, d.w - draft.w);
+      draft.y = clamp(y - drag.dy, 0, d.h - draft.h);
+    } else {
+      const ratio = RATIOS[cropRatio], right = x >= drag.ax, down = y >= drag.ay;
+      let w = Math.abs(x - drag.ax), h = Math.abs(y - drag.ay);
+      if (ratio) { w = Math.min(w, (down ? d.h - drag.ay : drag.ay) * ratio, right ? d.w - drag.ax : drag.ax); h = w / ratio; }
+      draft = { x: right ? drag.ax : drag.ax - w, y: down ? drag.ay : drag.ay - h, w, h };
+    }
+    drawBox();
+  }
+  function cropUp() {
+    if (draft && (draft.w < 2 || draft.h < 2)) draft = null;  // a click, not a box
+    drag = null;
+    drawBox();
+  }
+  function drawBox() {
+    const box = $("#box"), d = doc(), b = draft || { x: 0, y: 0, w: d.w, h: d.h };
+    box.hidden = !draft || tool !== "crop";
+    if (draft) Object.assign(box.style, { left: b.x * ks + "px", top: b.y * ks + "px", width: b.w * ks + "px", height: b.h * ks + "px" });
+    for (const [id, v] of [["cw", b.w], ["ch", b.h], ["cx", b.x], ["cy", b.y]])
+      if (document.activeElement !== $("#" + id)) $("#" + id).value = Math.round(v);
+    $("#crop-apply").disabled = !draft;
+  }
+  function setTool(t) {
+    tool = t;
+    pending = null;
+    if (t === "crop" && doc() && !draft) { const d = doc(); draft = { x: 0, y: 0, w: d.w, h: d.h }; }  // starts on the whole canvas
+    draw();
+  }
+  $("#tools").onclick = (e) => { const b = e.target.closest("button[data-t]"); if (b) setTool(b.dataset.t); };
+  $("#ratios").onclick = (e) => {  // a shape: the biggest box of that shape, centered
+    const b = e.target.closest("button");
+    if (!b || !doc()) return;
+    const d = doc(), ratio = RATIOS[(cropRatio = b.dataset.r)], w = ratio ? Math.min(d.w, d.h * ratio) : d.w, h = ratio ? w / ratio : d.h;
+    draft = { x: (d.w - w) / 2, y: (d.h - h) / 2, w, h };
+    setTool("crop");
+  };
+  for (const id of ["cw", "ch", "cx", "cy"]) $("#" + id).addEventListener("input", () => {  // typed pixel counts
+    const d = doc(), v = (i) => Math.max(0, Math.round(val(i) || 0));
+    const w = clamp(v("cw"), 1, d.w), h = clamp(v("ch"), 1, d.h);
+    draft = { w, h, x: Math.min(v("cx"), d.w - w), y: Math.min(v("cy"), d.h - h) };
+    draw();
+  });
+  function cropTo(b, label) {
+    const r = { x: Math.round(b.x), y: Math.round(b.y), w: Math.max(1, Math.round(b.w)), h: Math.max(1, Math.round(b.h)) };
+    draft = null;
+    tool = "move";
+    mask = null;
+    change((d) => { d.w = r.w; d.h = r.h; for (const l of d.layers) { l.x -= r.x; l.y -= r.y; } }, true, label);
+  }
+  const cancelCrop = () => { draft = null; setTool("move"); };
+  $("#crop-apply").onclick = () => cropTo(draft, "Crop");
+  $("#crop-cancel").onclick = cancelCrop;
+
+  // ---- Layers panel: pick, show / hide, drag to reorder, double-click to rename ----
+  const list = $("#layers");
+  let dragId = null;
+  list.onclick = (e) => {
+    const li = e.target.closest("li");
+    if (!li || e.target.matches("input")) return;
+    const id = +li.dataset.id;
+    if (e.target.closest(".eye")) change((d) => { const x = d.layers.find((y) => y.id === id); x.visible = !x.visible; }, true, "Show / hide");
+    else { active = id; draw(); }
+  };
+  list.ondblclick = (e) => {
+    const span = e.target.closest(".name");
+    if (!span) return;
+    const id = +span.parentElement.dataset.id, input = Object.assign(document.createElement("input"), { value: span.textContent, className: "rename" });
+    let done = false;
+    const finish = (keep) => {
+      if (done) return;
+      done = true;
+      input.remove();
+      listKey = "";
+      const name = input.value.trim();
+      if (keep && name && name !== span.textContent) change((d) => { d.layers.find((x) => x.id === id).name = name; }, true, "Rename");
+      else draw();
+    };
+    input.onkeydown = (k) => { if (k.key === "Enter") finish(true); if (k.key === "Escape") finish(false); k.stopPropagation(); };
+    input.onblur = () => finish(true);
+    span.replaceWith(input);
+    input.select();
+  };
+  const mark = (e) => {  // where the dragged layer would land: above or below the row under the pointer
+    list.querySelectorAll(".above, .below").forEach((x) => x.classList.remove("above", "below"));
+    const li = e.target.closest("li");
+    if (!li || +li.dataset.id === dragId) return null;
+    const b = li.getBoundingClientRect(), above = e.clientY < b.top + b.height / 2;
+    li.classList.add(above ? "above" : "below");
+    return { id: +li.dataset.id, above };
+  };
+  list.addEventListener("dragstart", (e) => {
+    const li = e.target.closest("li");
+    dragId = +li.dataset.id;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", li.textContent);
+    li.classList.add("dragging");
+  });
+  list.addEventListener("dragover", (e) => { if (dragId == null) return; e.preventDefault(); e.stopPropagation(); mark(e); });
+  list.addEventListener("drop", (e) => {
+    if (dragId == null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const t = mark(e), from = dragId;
+    dragId = null;
+    if (t) change((d) => {
+      const shown = [...d.layers].reverse(), m = shown.splice(shown.findIndex((x) => x.id === from), 1)[0];
+      shown.splice(shown.findIndex((x) => x.id === t.id) + (t.above ? 0 : 1), 0, m);
+      const order = shown.reverse();
+      if (order.every((x, i) => x === d.layers[i])) return false;
+      d.layers = order;
+      active = from;
+    }, true, "Reorder");
+  });
+  list.addEventListener("dragend", () => { dragId = null; listKey = ""; draw(); });
+  $("#dup").onclick = () => (mask ? layerViaCopy() : onLayer((l, d) => insert(d, { ...l, adj: { ...l.adj }, id: nextId++, name: l.name + " copy" }), true, "Duplicate"));
+  $("#lock-btn").onclick = () => onLayer((l) => { l.locked = !l.locked; }, true, "Lock");
+  function merged(layers, d, name) {  // layers drawn into one new layer the size of the canvas, effects and all
+    return makeLayer(name, flat({ ...d, layers }), d);
+  }
+  $("#merge").onclick = () => onLayer((l, d) => {
+    const i = d.layers.indexOf(l);
+    if (i < 1) return false;
+    const m = merged([d.layers[i - 1], l], d, d.layers[i - 1].name);
+    d.layers.splice(i - 1, 2, m);
+    active = m.id;
+  }, true, "Merge down");
+  $("#flatten").onclick = () => change((d) => {
+    const shown = d.layers.filter((x) => x.visible);
+    if (!shown.length) return false;
+    d.layers = [merged(shown, d, "Background")];
+    active = d.layers[0].id;
+  }, true, "Flatten");
+  const remove = () => onLayer((l, d) => { d.layers.splice(d.layers.indexOf(l), 1); active = null; }, true, "Delete layer");
+  $("#del").onclick = remove;
+  $("#blend").append(...Object.entries(BLENDS).map(([v, t]) => new Option(t, v)));
+  $("#blend").onchange = () => onLayer((l) => { l.blend = $("#blend").value; }, true, "Blend mode");
+
+  // ---- Properties, adjustments, curves, filters ----
+  for (const [box, rows] of Object.entries(SLIDERS)) for (const [k, label, min, max, step] of rows) {
+    const row = Object.assign(document.createElement("label"), { className: "slide" });
+    row.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${ADJ[k]}" data-k="${k}"><output></output>`;
+    $(box).append(row);
+  }
+  document.querySelectorAll(".slide input[data-k]").forEach((inp) => {
+    const k = inp.dataset.k, label = inp.parentElement.firstElementChild.textContent;
+    const set = (final) => onLayer((l) => { if (k === "opacity") l.opacity = +inp.value / 100; else l.adj[k] = +inp.value; }, final, label);
+    inp.oninput = () => set(false);
+    inp.onchange = () => set(true);
+    inp.ondblclick = () => { inp.value = inp.defaultValue; set(true); };  // back to normal
+  });
+  $("#px").onchange = () => shift((l) => { l.x = val("px") + (l.w * l.sx) / 2; }, true, "Move");
+  $("#py").onchange = () => shift((l) => { l.y = val("py") + (l.h * l.sy) / 2; }, true, "Move");
+  $("#pw").onchange = () => shift((l) => { const s = Math.max(1, val("pw")) / l.w; if ($("#plock").checked) l.sy *= s / l.sx; l.sx = s; }, true, "Resize");
+  $("#ph").onchange = () => shift((l) => { const s = Math.max(1, val("ph")) / l.h; if ($("#plock").checked) l.sx *= s / l.sy; l.sy = s; }, true, "Resize");
+  function fitLayer(fill) {  // centered, as big as fits (Fit) or just covering the canvas (Fill), counting the rotation
+    shift((l, d) => {
+      const t = (l.rot * Math.PI) / 180, c = Math.abs(Math.cos(t)), s = Math.abs(Math.sin(t));
+      const k = (fill ? Math.max : Math.min)(d.w / (l.w * c + l.h * s), d.h / (l.w * s + l.h * c));
+      Object.assign(l, { x: d.w / 2, y: d.h / 2, sx: k, sy: k });
+    }, true, fill ? "Fill canvas" : "Fit canvas");
+  }
+  $("#fit").onclick = () => fitLayer(false);
+  $("#fill").onclick = () => fitLayer(true);
+  const turnLayer = (deg) => shift((l) => { l.rot = Math.round((((deg % 360) + 360) % 360) * 10) / 10; }, true, "Rotate");
+  $("#rot-l").onclick = () => turnLayer(layer().rot - 90);
+  $("#rot-r").onclick = () => turnLayer(layer().rot + 90);
+  $("#angle").onchange = () => turnLayer(val("angle") || 0);
+  $("#flip-h").onclick = () => shift((l) => { l.flipH = !l.flipH; }, true, "Mirror");
+  $("#flip-v").onclick = () => shift((l) => { l.flipV = !l.flipV; }, true, "Flip");
+  $("#fill-fg").onclick = fillForeground;
+  $("#rasterize").onclick = () => onLayer((l) => { if (l.kind === "pixel") return false; rasterize(l); }, true, "Rasterize");
+  $("#bw").onclick = () => onLayer((l) => { l.adj.bw = !l.adj.bw; }, true, "Black & white");
+  $("#invert").onclick = () => onLayer((l) => { l.adj.invert = !l.adj.invert; }, true, "Invert");
+  $("#adj-reset").onclick = () => onLayer((l) => { l.adj = { ...ADJ }; }, true, "Reset adjustments");
+
+  // curves: points from (0,0) to (255,255); the ends move up and down only
+  const cv = $("#curve");
+  let bend = null;
+  const curveOf = (l) => l?.adj.curve || [[0, 0], [255, 255]];
+  function drawCurve(l) {
+    const ctx = cv.getContext("2d"), pts = curveOf(l), t = curveTable(pts);
+    ctx.clearRect(0, 0, 256, 256);
+    ctx.strokeStyle = "#2a2a28";
+    for (let i = 64; i < 256; i += 64) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 256); ctx.moveTo(0, i); ctx.lineTo(256, i); ctx.stroke(); }
+    ctx.strokeStyle = "#444"; ctx.beginPath(); ctx.moveTo(0, 256); ctx.lineTo(256, 0); ctx.stroke();
+    ctx.strokeStyle = "#d4ff00"; ctx.lineWidth = 2; ctx.beginPath();
+    t.forEach((y, x) => (x ? ctx.lineTo(x, 255 - y) : ctx.moveTo(x, 255 - y)));
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "#fff";
+    for (const [x, y] of pts) ctx.fillRect(x - 4, 255 - y - 4, 8, 8);
+  }
+  const curvePt = (e) => { const b = cv.getBoundingClientRect(); return [((e.clientX - b.left) / b.width) * 255, 255 - ((e.clientY - b.top) / b.height) * 255]; };
+  cv.addEventListener("pointerdown", (e) => {
+    const l = layer();
+    if (!l) return;
+    const pts = curveOf(l).map((p) => [...p]), [x, y] = curvePt(e);
+    let i = pts.findIndex(([px, py]) => Math.hypot(px - x, py - y) < 12);
+    if (i < 0) { i = pts.findIndex(([px]) => px > x); pts.splice(i, 0, [Math.round(x), Math.round(clamp(y, 0, 255))]); }
+    bend = { i, pts };
+    cv.setPointerCapture(e.pointerId);
+    onLayer((l2) => { l2.adj.curve = pts.map((p) => [...p]); }, false);
+  });
+  cv.addEventListener("pointermove", (e) => {
+    if (!bend) return;
+    const [x, y] = curvePt(e), { i, pts } = bend, end = i === 0 || i === pts.length - 1;
+    const out = !end && (y < -40 || y > 295);  // dragged off the box: the point goes
+    const next = pts.map((p) => [...p]);
+    if (out) next.splice(i, 1);
+    else next[i] = [end ? next[i][0] : Math.round(clamp(x, next[i - 1][0] + 1, next[i + 1][0] - 1)), Math.round(clamp(y, 0, 255))];
+    bend.next = next;
+    onLayer((l) => { l.adj.curve = next; }, false);
+  });
+  cv.addEventListener("pointerup", () => {
+    if (!bend) return;
+    const next = bend.next || bend.pts;
+    bend = null;
+    onLayer((l) => { l.adj.curve = next.length === 2 && next[0].join() === "0,0" && next[1].join() === "255,255" ? null : next; }, true, "Curves");
+  });
+  $("#curve-reset").onclick = () => onLayer((l) => { l.adj.curve = null; }, true, "Curves");
+
+  // the whole image: canvas size, resize, quarter turns, mirror
+  const canvasTo = (w, h) => change((d) => {
+    for (const l of d.layers) { l.x += (w - d.w) / 2; l.y += (h - d.h) / 2; }
+    d.w = w; d.h = h;
+  }, true, "Canvas size");
+  const px = (id, fallback) => Math.max(1, Math.round(val(id) || fallback));
+  $("#iw").onchange = () => canvasTo(px("iw", doc().w), doc().h);
+  $("#ih").onchange = () => canvasTo(doc().w, px("ih", doc().h));
+  const resizeTo = (w, h) => change((d) => {
+    const fx = w / d.w, fy = h / d.h;
+    for (const l of d.layers) { l.x *= fx; l.y *= fy; l.sx *= fx; l.sy *= fy; l.adj.blur *= fx; }
+    d.w = w; d.h = h;
+  }, true, "Resize image");
+  $("#rw").onchange = () => { const d = doc(), w = px("rw", d.w); resizeTo(w, $("#lock").checked ? Math.max(1, Math.round((w * d.h) / d.w)) : d.h); };
+  $("#rh").onchange = () => { const d = doc(), h = px("rh", d.h); resizeTo($("#lock").checked ? Math.max(1, Math.round((h * d.w) / d.h)) : d.w, h); };
+  $("#rp").onchange = () => { const d = doc(), p = clamp(val("rp") || 100, 1, 1000) / 100; resizeTo(Math.max(1, Math.round(d.w * p)), Math.max(1, Math.round(d.h * p))); };
+  const turnImage = (right) => change((d) => {
+    const { w, h } = d;
+    for (const l of d.layers) {
+      [l.x, l.y] = right ? [h - l.y, l.x] : [l.y, w - l.x];
+      l.rot = (l.rot + (right ? 90 : 270)) % 360;
+    }
+    d.w = h; d.h = w;
+  }, true, "Rotate image");
+  $("#img-rot-l").onclick = () => turnImage(false);
+  $("#img-rot-r").onclick = () => turnImage(true);
+  const mirrorImage = (axis) => change((d) => {
+    for (const l of d.layers) {  // a mirrored, turned layer is the mirror image turned the other way
+      if (axis === "H") { l.x = d.w - l.x; l.flipH = !l.flipH; } else { l.y = d.h - l.y; l.flipV = !l.flipV; }
+      l.rot = (360 - l.rot) % 360;
+    }
+  }, true, "Mirror image");
+  $("#img-flip-h").onclick = () => mirrorImage("H");
+  $("#img-flip-v").onclick = () => mirrorImage("V");
+
+  // ---- History and keys (Photoshop's where it makes sense) ----
+  const goTo = (i) => { pos = clamp(i, 1, history.length - 1); live = null; draft = null; draw(); };
+  const undo = () => goTo(pos - 1), redo = () => goTo(pos + 1);
+  $("#undo").onclick = undo;
+  $("#redo").onclick = redo;
+  $("#hist").onclick = (e) => { const li = e.target.closest("li"); if (li) goTo(+li.dataset.i); };
+  $("#close").onclick = () => {
+    if (!confirm("Close this image? Changes you haven't saved are lost.")) return;
+    history = [null]; labels = [""]; pos = 0; live = null; draft = null; active = null; mask = null; listKey = "x";
+    note("");
+    draw();
+  };
+  addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey, typing = e.target.matches("input[type=number], input:not([type]), textarea, select");
+    if (mod && k === "o") { e.preventDefault(); return $("#file").click(); }
+    if (!doc()) return;
+    if (mod) {
+      if (typing) return;  // text boxes undo, copy and paste their own typing
+      const act = { z: e.shiftKey ? redo : undo, y: redo, j: () => $("#dup").click(), e: () => $("#merge").click(),
+                    s: () => $(e.shiftKey ? "#save-project" : "#export").click(), a: selectAll, d: () => setMask(null),
+                    i: () => e.shiftKey && invertMask(), c: copy, x: () => $("#sel-cut").click(),
+                    0: () => $("#zoom-fit").click(), 1: () => zoomTo(1), "=": () => zoomTo(ks * 1.25), "+": () => zoomTo(ks * 1.25),
+                    "-": () => zoomTo(ks / 1.25) }[k];
+      if (act) { e.preventDefault(); act(); }
+      return;
+    }
+    if (e.target.matches("input, textarea, select")) return;
+    if (e.key === " ") { e.preventDefault(); if (!spaceDown) { spaceDown = true; draw(); } return; }
+    if (e.altKey && e.key === "Backspace") { e.preventDefault(); return fillForeground(); }
+    const keys = { v: "move", m: "marquee", l: "lasso", w: "wand", c: "crop", i: "eyedropper", b: "brush", e: "eraser",
+                   g: tool === "bucket" ? "gradient" : "bucket", t: "text", u: "shape", h: "hand", z: "zoom" };
+    if (keys[k] && !e.altKey) {
+      if (k === "m" && tool === "marquee") opt.marquee = opt.marquee === "rect" ? "ellipse" : "rect";  // M again: the other shape
+      return setTool(keys[k]);
+    }
+    if (k === "x") return $("#swap").click();
+    if (k === "d") { $("#fg").value = "#000000"; $("#bg").value = "#ffffff"; return draw(); }
+    if (k === "[" || k === "]") { $("#b-size").value = clamp(val("b-size") * (k === "]" ? 1.2 : 1 / 1.2), 1, 500); return draw(); }
+    if (tool === "crop" && e.key === "Enter" && draft) return cropTo(draft, "Crop");
+    if (e.key === "Escape") return tool === "crop" ? cancelCrop() : setMask(null);
+    const step = e.shiftKey ? 10 : 1, move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (move && layer()) { e.preventDefault(); shift((l) => { l.x += move[0]; l.y += move[1]; }, true, "Nudge"); }
+    else if ((e.key === "Delete" || e.key === "Backspace") && layer()) { e.preventDefault(); mask ? clearSelected("Delete pixels") : remove(); }
+  });
+  addEventListener("keyup", (e) => { if (e.key === " " && spaceDown) { e.preventDefault(); spaceDown = false; draw(); } });
+  new ResizeObserver(() => draw()).observe(work);  // the window or the side panel changed size
+
+  // the side panel's width: drag the divider (or arrow keys on it); remembered in this browser
+  const desk = $(".desk");
+  function sideTo(w) {
+    w = Math.round(clamp(w, 240, Math.max(240, Math.min(760, innerWidth - 420))));
+    desk.style.setProperty("--side", w + "px");
+    $("#splitter").ariaValueNow = w;
+    try { localStorage.setItem("mt-side", w); } catch {}
+  }
+  try { if (+localStorage.getItem("mt-side")) sideTo(+localStorage.getItem("mt-side")); } catch {}
+  const split = $("#splitter");
+  split.addEventListener("pointerdown", (e) => { split.setPointerCapture(e.pointerId); split.classList.add("on"); e.preventDefault(); });
+  split.addEventListener("pointermove", (e) => { if (split.hasPointerCapture(e.pointerId)) sideTo(desk.getBoundingClientRect().right - e.clientX - 3); });
+  split.addEventListener("pointerup", () => split.classList.remove("on"));
+  split.addEventListener("keydown", (e) => {
+    const step = { ArrowLeft: 20, ArrowRight: -20 }[e.key];
+    if (step) { e.preventDefault(); e.stopPropagation(); sideTo($(".side").offsetWidth + step); }
+  });
+
+  // ---- Saving: exported images and projects are written to the output folder by the server ----
+  $("#formats").onclick = (e) => { const b = e.target.closest("button"); if (b) { fmt = b.dataset.f; draw(); } };
+  $("#quality").oninput = () => ($("#q-row output").textContent = $("#quality").value);
+  function openLink(path) {  // Explorer opens on the result: a web page can't open local folders itself
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Open folder" });
+    b.onclick = async () => {
+      const r = await fetch("/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file: path }) }).catch(() => null);
+      if (!r?.ok) b.textContent = "file moved or deleted";
+    };
+    return b;
+  }
+  const crc = (bytes) => {  // CRC-32, as PNG chunks need
+    let c = -1;
+    for (const x of bytes) { c ^= x; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); }
+    return (c ^ -1) >>> 0;
+  };
+  async function withDpi(blob, dpi) {  // the resolution, for printing: a pHYs chunk in PNG, the JFIF density in JPG
+    const b = new Uint8Array(await blob.arrayBuffer()), v = new DataView(b.buffer);
+    if (fmt === "png") {
+      const chunk = new Uint8Array(21), cv = new DataView(chunk.buffer), ppm = Math.round(dpi / 0.0254);
+      cv.setUint32(0, 9);
+      chunk.set([112, 72, 89, 115], 4);  // "pHYs"
+      cv.setUint32(8, ppm); cv.setUint32(12, ppm); chunk[16] = 1;  // pixels per meter
+      cv.setUint32(17, crc(chunk.subarray(4, 17)));
+      return new Blob([b.subarray(0, 33), chunk, b.subarray(33)], { type: blob.type });  // right after the header chunk
+    }
+    if (fmt === "jpg" && v.getUint16(2) === 0xffe0 && String.fromCharCode(...b.subarray(6, 11)) === "JFIF\0") {
+      b[13] = 1;  // dots per inch
+      v.setUint16(14, dpi); v.setUint16(16, dpi);
+      return new Blob([b], { type: blob.type });
+    }
+    return blob;  // WebP has no standard place for it
+  }
+  async function save(blob, name, what) {
+    note("saving…", "live");
+    try {
+      const r = await (await fetch("/image/save", { method: "POST", body: blob,
+        headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(name) } })).json();
+      if (!r.ok) throw new Error(r.error);
+      note(`✓ ${r.file} · ${size(r.size)} · ${what}`, "ok");
+      $("#status").append(" ", openLink(r.file));
+    } catch (err) { note(`✗ couldn't save: ${err.message || "is the server running?"}`, "err"); }
+  }
+  const stem = () => doc().name.replace(/\.[^.]+$/, "");
+  $("#export").onclick = async () => {
+    const d = doc(), c = document.createElement("canvas");
+    if (!d) return;
+    c.width = d.w; c.height = d.h;
+    const ctx = c.getContext("2d");
+    if (fmt === "jpg") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, d.w, d.h); }  // JPG has no see-through: white behind
+    paint(ctx, d, 1);
+    const blob = await withDpi(await new Promise((ok) => c.toBlob(ok, { png: "image/png", jpg: "image/jpeg", webp: "image/webp" }[fmt],
+                                                                   $("#quality").value / 100)), d.dpi);
+    save(blob, `${stem()} (edited).${fmt}`, `${d.w} × ${d.h} px`);
+  };
+  // projects (.mtimg): the layers as PNG plus all their settings, to keep editing later
+  const asDataUrl = (blob) => new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(blob); });
+  $("#save-project").onclick = async () => {
+    const d = doc();
+    if (!d) return;
+    note("packing the layers…", "live");
+    const layers = [];
+    for (const l of d.layers) layers.push({ ...l, src: await asDataUrl(await copyOf(l.src).convertToBlob({ type: "image/png" })) });
+    const json = JSON.stringify({ format: "multitool-image", version: 1, w: d.w, h: d.h, dpi: d.dpi, name: d.name, layers });
+    save(new Blob([json]), `${stem()}.mtimg`, `project, ${d.layers.length} layer${d.layers.length === 1 ? "" : "s"}`);
+  };
+  async function openProject(f) {
+    try {
+      const p = JSON.parse(await f.text());
+      if (p.format !== "multitool-image") throw new Error();
+      if (doc() && !confirm("Open this project? Changes you haven't saved are lost.")) return;
+      const layers = [];
+      for (const l of p.layers) {
+        const src = await createImageBitmap(await (await fetch(l.src)).blob());
+        layers.push({ ...l, src, id: nextId++, adj: { ...ADJ, ...l.adj } });
+      }
+      active = layers.at(-1)?.id;
+      open({ w: p.w, h: p.h, dpi: p.dpi || 72, name: p.name || f.name, layers }, "Open project");
+    } catch { $("#load-error").textContent = `✗ ${f.name} isn't a Multitool project.`; note(`✗ ${f.name} isn't a Multitool project.`, "err"); }
+  }
+  const showOut = (path) => { $("#out").textContent = path; $("#out").title = path; };
+  fetch("/convert/state?tool=image").then((r) => r.json()).then((s) => showOut(s.out)).catch(() => {});
+  $("#pick").onclick = async () => {
+    const b = $("#pick");
+    b.disabled = true;
+    b.textContent = "Pick it in the window…";
+    try {
+      const r = await (await fetch("/folder", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ which: "convert_out" }) })).json();
+      if (r.ok) showOut(r.out);
+    } catch {}
+    b.disabled = false;
+    b.textContent = "Change";
+  };
+
+  // files: dropped anywhere, opened, or pasted (Ctrl+V) — each image becomes a new layer
+  const hasFiles = (e) => e.dataTransfer?.types.includes("Files");
+  addEventListener("dragover", (e) => { if (hasFiles(e)) { e.preventDefault(); work.classList.add("over"); } });
+  addEventListener("dragleave", (e) => { if (!e.relatedTarget) work.classList.remove("over"); });
+  addEventListener("drop", (e) => { if (!hasFiles(e)) return; e.preventDefault(); work.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
+  addEventListener("paste", (e) => {
+    if (e.target.closest?.("input, textarea")) return;
+    const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+    if (files.length) { e.preventDefault(); return addFiles(files, true); }
+    if (clipCopy && doc()) {  // copied here, but the system clipboard didn't take it
+      e.preventDefault();
+      change((d) => insert(d, Object.assign(makeLayer("Pasted", clipCopy.c, d), { x: clipCopy.x + clipCopy.w / 2, y: clipCopy.y + clipCopy.h / 2 })), true, "Paste");
+    }
+  });
+  for (const id of ["file", "file2"]) $("#" + id).onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
+  draw();
+</script>
+</body>
+</html>
