@@ -102,7 +102,9 @@ def probe(path):
     targets = ([(t, VIDEO[t][0]) for t in VIDEO] + ([(t, AUDIO[t][0]) for t in AUDIO] if a else []) if kind == "video"
                else [(t, AUDIO[t][0]) for t in AUDIO] if kind == "audio"
                else [(t, IMAGE[t][0]) for t in IMAGE] if kind == "image" else [])
-    return {"kind": kind, "info": " · ".join(words), "targets": targets, "w": w, "h": h, "duration": duration,
+    n, _, d = (v or {}).get("avg_frame_rate", "0/0").partition("/")
+    fps = round(num(n) / num(d), 2) if num(n) and num(d) else None
+    return {"kind": kind, "info": " · ".join(words), "targets": targets, "w": w, "h": h, "duration": duration, "fps": fps,
             "_v": v and v["codec_name"], "_a": a and a["codec_name"]}
 
 
@@ -217,6 +219,10 @@ def clean_recipe(job, r):
         out["crop"] = (px(c["w"], 2, w - x), px(c["h"], 2, h - y), x, y)
     if s := r.get("size"):
         out["size"] = (px(s["w"], 2, 8192), px(s["h"], 2, 8192))
+    if r.get("fps"):
+        out["fps"] = min(max(float(r["fps"]), 1.0), 120.0)  # NaN fails both comparisons: refused below
+        if not 1 <= out["fps"] <= 120:
+            raise ValueError("bad frame rate")
     if r.get("canvas") in CANVASES:
         out["canvas"] = r["canvas"]
     turn = float(r.get("rotate") or 0) % 360
@@ -255,9 +261,9 @@ def canvas_size(job, r):
 
 
 def edit_filters(r):
-    """The filter chain, in the order the preview shows it: mirror, crop, then the final size.
+    """The filter chain, in the order the preview shows it: frame rate, mirror, crop, then the final size.
     (A canvas needs a filter graph instead: see picture().)"""
-    chain = (["hflip"] if r["flipH"] else []) + (["vflip"] if r["flipV"] else [])
+    chain = ([f"fps={r['fps']:g}"] if "fps" in r else []) + (["hflip"] if r["flipH"] else []) + (["vflip"] if r["flipV"] else [])
     if "crop" in r:
         chain.append("crop={}:{}:{}:{}".format(*r["crop"]))
     if "size" in r:
@@ -271,8 +277,7 @@ def picture(job, r):
     if not {"canvas", "place", "rotate"} & r.keys():
         chain = edit_filters(r)
         return ["-vf", ",".join(chain)] if chain else []
-    pre = ",".join((["hflip"] if r["flipH"] else []) + (["vflip"] if r["flipV"] else [])
-                   + (["crop={}:{}:{}:{}".format(*r["crop"])] if "crop" in r else []))
+    pre = ",".join(edit_filters({k: v for k, v in r.items() if k != "size"}))  # frame rate, mirror, crop (size comes last)
     (cw, ch), (fw, fh) = canvas_size(job, r), frame_size(job, r)
     x, y, w, h = r.get("place") or ((cw - fw) // 2, (ch - fh) // 2, fw - fw % 2, fh - fh % 2)  # the page sends it; else centered
     turn = ""

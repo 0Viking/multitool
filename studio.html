@@ -77,6 +77,9 @@
           <label><input type="number" id="rp" min="1" max="400"> %</label>
         </div>
         <label class="check"><input type="checkbox" id="lock" checked> keep the shape</label>
+        <div class="fields" id="fps-field">
+          <label>Frame rate <input type="number" id="fps" min="1" max="120" step="any" placeholder="same"> fps</label>
+        </div>
       </fieldset>
 
       <fieldset class="group" data-mode="editor">
@@ -148,7 +151,7 @@
   const home = MODE === "editor" ? "move" : "crop";  // what dragging on the picture does at first
   const $ = (s) => document.querySelector(s);
   const RATIOS = { "1:1": 1, "16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "4:5": 4 / 5 };
-  const blank = () => ({ crop: null, size: null, canvas: null, place: null, rotate: 0, flipH: false, flipV: false, mute: false, trim: null, goal: null, format: null });
+  const blank = () => ({ crop: null, size: null, fps: null, canvas: null, place: null, rotate: 0, flipH: false, flipV: false, mute: false, trim: null, goal: null, format: null });
   let file = null, kind = "", media = null, natW = 0, natH = 0, duration = 0, k = 1, ks = 1;
   let jobId = null, job = null, progress = {}, xhr = null, uploaded = null, note = "";
   let history = [blank()], pos = 0, tool = home, draft = null, drag = null, cropRatio = "";
@@ -425,6 +428,10 @@
     const [cw, ch] = canvasDims(), p = Math.min(Math.max(+$("#rp").value || 100, 1), 400) / 100;
     resize(even(cw * p), even(ch * p));
   };
+  $("#fps").onchange = () => {  // blank, or the original's rate: unchanged
+    const v = Math.min(Math.max(+$("#fps").value || 0, 0), 120);
+    commit({ ...cur(), fps: v >= 1 && v !== job?.fps ? v : null });
+  };
   $("#canvas").onclick = (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -561,7 +568,7 @@
   function readout() {
     const [w, h] = outSize(), [s, e] = trimRange(), r = cur();
     $("#readout").textContent = [`Output ${w} × ${h} px`, kind === "video" && `${stamp(e - s)} long`, turn() && `rotated ${turn()}°`,
-      kind === "video" && r.mute && "no sound", `original ${natW} × ${natH} px · ${size(file.size)}`].filter(Boolean).join(" · ");
+      r.fps && `${r.fps} fps`, kind === "video" && r.mute && "no sound", `original ${natW} × ${natH} px · ${size(file.size)}`].filter(Boolean).join(" · ");
   }
 
   function render() {
@@ -580,7 +587,8 @@
     $("#sound").ariaPressed = String(!r.mute);
     $("#sound").textContent = r.mute ? "Sound off" : "Sound on";
     const [w, h] = outSize(), [cw] = canvasDims();
-    for (const [id, v] of [["rw", w], ["rh", h], ["rp", Math.round((w / cw) * 100)], ["angle", turn()]])
+    $("#fps-field").hidden = kind === "image";
+    for (const [id, v] of [["rw", w], ["rh", h], ["rp", Math.round((w / cw) * 100)], ["angle", turn()], ["fps", r.fps ?? ""]])
       if (document.activeElement !== $("#" + id)) $("#" + id).value = v;
     if (kind === "video") {
       media.muted = r.mute;
@@ -623,7 +631,7 @@
   function recipe() {
     const r = cur(), placed = MODE === "editor" && (r.canvas || r.rotate || r.place);  // else the plain picture: a quicker export
     return { flipH: r.flipH, flipV: r.flipV, mute: r.mute, crop: r.crop, size: r.size, canvas: r.canvas,
-             place: placed ? placement() : null, rotate: r.rotate, trim: r.trim, target_bytes: goalBytes() };
+             place: placed ? placement() : null, rotate: r.rotate, fps: r.fps, trim: r.trim, target_bytes: goalBytes() };
   }
   $("#export").onclick = async () => {
     const r = await post("/convert/start", { id: jobId, target: target(), recipe: recipe() }).then((res) => res.json()).catch(() => ({ ok: false }));
@@ -665,6 +673,7 @@
     try {
       const s = await (await fetch("/convert/state?tool=" + MODE)).json();
       job = (jobId && s.jobs.find((j) => j.id === jobId)) || null;
+      $("#fps").placeholder = job?.fps ? `${job.fps} (same)` : "same";
       progress = s.progress;
       if (!$("#pick").disabled) $("#out").textContent = s.out;
     } catch {}
