@@ -238,6 +238,7 @@
         <button type="button" data-p="1080 1080 px 72">Square post</button><button type="button" data-p="1080 1350 px 72">Portrait post</button>
         <button type="button" data-p="1080 1920 px 72">Story</button><button type="button" data-p="210 297 mm 300">A4</button>
         <button type="button" data-p="8.5 11 in 300">Letter</button><button type="button" data-p="4 6 in 300">Photo 4×6"</button>
+        <button type="button" data-p="">Custom</button>
       </div>
       <div class="fields">
         <label>Width <input type="number" id="nd-w" value="1920" min="0.01" step="any" required></label>
@@ -384,7 +385,7 @@
   }
   // New project: size in pixels or print units at a resolution (ppi, saved into PNG / JPG exports), and a background
   const PER_INCH = { in: 1, cm: 2.54, mm: 25.4 };
-  let ndUnit = "px", ndBg = "#ffffff";
+  let ndUnit = "px", ndBg = "#ffffff", ndPreset = "1920 1080 px 72";  // "" = custom
   function ndPixels() {
     const dpi = clamp(Math.round(val("nd-dpi") || 72), 1, 2400), u = $("#nd-unit").value;
     const px = (v) => clamp(Math.round(u === "px" ? v : (v / PER_INCH[u]) * dpi), 1, 16384);
@@ -394,6 +395,7 @@
     const [w, h, dpi] = ndPixels();
     $("#nd-info").textContent = `${w} × ${h} px · ${dpi} ppi · ${((w / dpi) * 2.54).toFixed(1)} × ${((h / dpi) * 2.54).toFixed(1)} cm when printed`;
     document.querySelectorAll("#nd-bg button").forEach((b) => (b.ariaPressed = String(b.dataset.bg === ndBg)));
+    document.querySelectorAll("#nd-presets button").forEach((b) => (b.ariaPressed = String(b.dataset.p === ndPreset)));
     $("#nd-color").parentElement.ariaPressed = String(ndBg === $("#nd-color").value);
   }
   $("#nd-unit").onchange = () => {  // the same size, written in the new unit
@@ -408,14 +410,16 @@
   $("#nd-presets").onclick = (e) => {
     const b = e.target.closest("button");
     if (!b) return;
-    const [w, h, u, dpi] = b.dataset.p.split(" ");
+    ndPreset = b.dataset.p;
+    if (!ndPreset) { ndShow(); return $("#nd-w").focus(); }  // Custom: type your own
+    const [w, h, u, dpi] = ndPreset.split(" ");
     $("#nd-unit").value = ndUnit = u;
     $("#nd-w").value = w; $("#nd-h").value = h; $("#nd-dpi").value = dpi;
     ndShow();
   };
   $("#nd-bg").onclick = (e) => { const b = e.target.closest("button"); if (b) { ndBg = b.dataset.bg; ndShow(); } };
   $("#nd-color").oninput = () => { ndBg = $("#nd-color").value; ndShow(); };
-  for (const id of ["nd-w", "nd-h", "nd-dpi"]) $("#" + id).oninput = ndShow;
+  for (const id of ["nd-w", "nd-h", "nd-dpi"]) $("#" + id).oninput = () => { ndPreset = ""; ndShow(); };  // typed: custom
   const newProject = () => {
     if (doc() && !confirm("Start a new project? Changes you haven't saved are lost.")) return;
     ndShow();
@@ -607,7 +611,7 @@
       const eye = Object.assign(document.createElement("button"), { type: "button", className: "eye", textContent: x.visible ? "👁" : "" });
       eye.ariaLabel = (x.visible ? "Hide " : "Show ") + x.name;
       eye.ariaPressed = String(x.visible);
-      const img = Object.assign(document.createElement("img"), { className: "lt", src: thumb(x.src).url, alt: "", draggable: false });
+      const img = Object.assign(document.createElement("img"), { className: "lt", src: thumb(x.src).url, alt: "", draggable: false, title: "Ctrl+click: select what's on this layer" });
       li.append(eye, img, Object.assign(document.createElement("span"), { className: "name", textContent: x.name, title: "Double-click to rename" }));
       if (x.kind !== "pixel") li.append(Object.assign(document.createElement("span"), { className: "kind", textContent: x.kind === "text" ? "T" : "◆", title: x.kind }));
       if (x.locked) li.append(Object.assign(document.createElement("span"), { className: "lk", textContent: "locked", title: "Position locked" }));
@@ -1119,6 +1123,10 @@
     const li = e.target.closest("li");
     if (!li || e.target.matches("input")) return;
     const id = +li.dataset.id;
+    if ((e.ctrlKey || e.metaKey) && e.target.closest(".lt")) {  // Ctrl+click a thumbnail: select what's on that layer (Shift adds, Alt removes)
+      const d = doc(), l = d.layers.find((x) => x.id === id), pixels = flat({ ...d, layers: [{ ...l, visible: true, opacity: 1, blend: "source-over" }] });
+      return combine((ctx) => ctx.drawImage(pixels, 0, 0), modeOf(e));
+    }
     if (e.target.closest(".eye")) change((d) => { const x = d.layers.find((y) => y.id === id); x.visible = !x.visible; }, true, "Show / hide");
     else { active = id; draw(); }
   };
