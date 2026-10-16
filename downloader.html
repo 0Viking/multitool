@@ -7,24 +7,25 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <a class="back" href="/">← Multitool</a>
-  <h1>Down<span>loader</span></h1>
-  <p class="tag">Any tab or link · best quality, always</p>
+<body class="page">
+  <header class="bar">
+    <a class="back" href="/">← Multitool</a>
+    <strong class="app-name">Down<span>loader</span></strong>
+    <form id="form">
+      <textarea id="url" rows="1" required placeholder="Paste a link — or several (one per line, or comma-separated), or a YouTube playlist" aria-label="Video links" autofocus></textarea>
+      <button value="video" aria-label="Download video">Video</button>
+      <button value="audio" class="alt" aria-label="Download audio as MP3">Audio</button>
+    </form>
+    <span class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></span>
+  </header>
 
-  <form id="form">
-    <input id="url" type="url" required placeholder="Paste a YouTube / X / Instagram / TikTok link" aria-label="Video link" autofocus>
-    <button value="video" aria-label="Download video">Video</button>
-    <button value="audio" class="alt" aria-label="Download audio as MP3">Audio</button>
-  </form>
-  <p class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></p>
-  <p class="status err" id="status"></p>
-
-  <section id="dl-section" hidden>
-    <h2 class="still">Downloads</h2>
+  <main class="cols">
+  <section class="col" id="dl-section" hidden>
+    <h2 class="still">Downloads <span class="count" id="dl-count"></span></h2>
     <ol id="downloads"></ol>
   </section>
 
+  <section class="col">
   <section class="setup" id="setup" hidden>
     <h3>Add the browser extension</h3>
     <p>It catches the videos playing in your other tabs and lets videos that need you signed in download.
@@ -44,12 +45,25 @@
 
   <h2>Caught in your tabs</h2>
   <ol id="list"></ol>
+  </section>
+  </main>
+  <footer class="status-bar"><p class="status err" id="status"></p></footer>
+
+  <dialog class="queue-pop" id="batch-pop" aria-labelledby="bp-title">
+    <h3 id="bp-title">Adding to the download queue</h3>
+    <progress id="bp-bar" max="1"></progress>
+    <p class="bp-now" id="bp-now"></p>
+    <p class="bp-count" id="bp-count"></p>
+    <ul class="bp-errors" id="bp-errors"></ul>
+    <div class="acts"><button type="button" class="alt" id="bp-stop" title="What's already in the queue stays">Stop adding</button><button type="button" id="bp-close" hidden>Close</button></div>
+  </dialog>
 
 <script>
   const $ = (s) => document.querySelector(s);
   const views = {};  // download key -> its row's elements, for live progress
   let jobs = {}, lastDownloads = "", lastCaught = "";  // jobs: live progress from the server
-  const ACTION = { busy: "Pause", paused: "Resume", error: "Retry" };
+  const ACTION = { busy: "Pause", queued: "Pause", paused: "Resume", error: "Retry" };
+  let limit = 5, ahead = {};  // downloads at once; waiting row key -> how many are before it in line
 
   const size = (n) => {
     if (n == null) return "?";
@@ -71,6 +85,7 @@
     try { r = await (await post("/download", body)).json(); }
     catch { r = { ok: false, error: "server offline — run python server.py" }; }
     $("#status").textContent = r.ok ? "" : "✗ " + r.error;
+    if (r.batch) { shownBatch = r.batch; showBatch([{ id: r.batch, status: "busy", links: body.urls?.length || 1, at: 0, found: 0, errors: [] }]); }
     poll();
     return r.ok;
   }
@@ -80,11 +95,50 @@
     poll();
   }
 
+  // One link or many (one per line, or comma-separated); playlists open up into their videos. Enter means Video,
+  // the first button; Shift+Enter starts a new line.
   $("#form").onsubmit = async (e) => {
     e.preventDefault();
-    const url = $("#url").value.trim();  // Enter means Video, the first button
-    if (await start({ key: url, url, audio: e.submitter?.value === "audio" })) $("#url").value = "";
+    const audio = e.submitter?.value === "audio", links = [...new Set($("#url").value.split(/[\s,]+/).filter(Boolean))];
+    const bad = links.filter((u) => !/^https?:\/\/\S+$/i.test(u));
+    if (bad.length) return ($("#status").textContent = `✗ not a link: ${bad.slice(0, 3).join("  ")}`);
+    if (links.length && await start(links.length === 1 ? { key: links[0], url: links[0], audio } : { urls: links, audio })) $("#url").value = "";
   };
+  $("#url").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#form").requestSubmit(); }
+  });
+
+  // Adding many links or a playlist: a popup with the progress, in front of everything until it's done.
+  let shownBatch = null, closing = null;
+  const dismissed = new Set();
+  function showBatch(batches) {
+    const dlg = $("#batch-pop"), b = batches.find((x) => x.status === "busy") || batches.find((x) => x.id === shownBatch && !dismissed.has(x.id));
+    if (!b) { if (dlg.open) dlg.close(); return; }
+    shownBatch = b.id;
+    if (!dlg.open) dlg.showModal();
+    // ==========  (the bar)
+    // Queueing <video name>…
+    // 7/12 videos queued
+    const busy = b.status === "busy", found = b.found || 0, handled = found + (b.skipped || 0) + (b.unavailable || 0);
+    const total = Math.max(b.expected || b.links || 1, handled);
+    $("#bp-bar").value = busy ? handled / total : 1;
+    $("#bp-now").textContent = !busy ? (b.status === "stopped" ? "Stopped" : "Done") : b.current ? `Queueing ${b.current}…` : b.link ? "Reading the playlist…" : "Starting…";
+    $("#bp-now").title = b.current || "";
+    $("#bp-count").textContent = [`${found}/${total} videos queued`, b.skipped && `${b.skipped} already in the list`,
+      b.unavailable && `${b.unavailable} private or deleted`, b.mix && "a YouTube Mix never ends: its first 50"].filter(Boolean).join(" · ");
+    $("#bp-errors").replaceChildren(...(b.errors || []).map((e) => Object.assign(document.createElement("li"), { textContent: "✗ " + e })));
+    $("#bp-stop").hidden = !busy;
+    $("#bp-close").hidden = busy;
+    if (!busy && !b.errors.length && !closing) closing = setTimeout(() => { closing = null; dismiss(); }, 1500);  // all good: it goes away
+  }
+  function dismiss() {
+    dismissed.add(shownBatch);
+    shownBatch = null;
+    $("#batch-pop").close();
+  }
+  $("#batch-pop").addEventListener("cancel", (e) => { e.preventDefault(); if ($("#bp-stop").hidden) dismiss(); });  // Esc only once it's done
+  $("#bp-stop").onclick = () => post("/batch/stop", { id: shownBatch }).then(poll);
+  $("#bp-close").onclick = dismiss;
 
   $("#pick").onclick = async () => {
     const b = $("#pick");
@@ -108,6 +162,7 @@
     li.querySelector("b").textContent = String(i + 1).padStart(2, "0");
     const img = li.querySelector("img");
     img.referrerPolicy = "no-referrer"; // some CDNs refuse images hotlinked from another site
+    img.loading = "lazy";  // a playlist can bring hundreds
     img.onerror = () => img.remove();
     if (it.thumb) img.src = it.thumb; else img.remove();
     li.querySelector(".badge").textContent = [it.duration && clock(it.duration), it.size && size(it.size)].filter(Boolean).join(" · ");
@@ -124,7 +179,7 @@
     v.btn.hidden = !ACTION[d.status];
     v.btn.textContent = ACTION[d.status] || "";
     v.btn.ariaLabel = `${v.btn.textContent}: ${v.name}`;
-    v.bar.hidden = !["busy", "paused"].includes(d.status);
+    v.bar.hidden = !["busy", "paused", "queued"].includes(d.status);
     if (p?.total) v.bar.value = Math.min(p.done / p.total, 1);
     else v.bar.removeAttribute("value");
     v.st.className = "status " + ({ busy: "live", done: "ok", error: "err" }[d.status] || "");
@@ -133,6 +188,7 @@
       ? !p ? "starting…"
         : p.part === "audio" && p.status === "finished" ? (d.audio ? "making the MP3…" : "merging video + audio…")
         : [p.part, sizes, p.speed && size(p.speed) + "/s"].filter(Boolean).join(" · ")
+      : d.status === "queued" ? `waiting for a free slot · ${ahead[d.key] ? ahead[d.key] + " ahead" : "next"}`
       : d.status === "paused" ? ["paused", sizes].filter(Boolean).join(" · ")
       : (d.status === "done" ? "✓ " : "✗ ") + d.msg;
     if (d.status === "done" && d.file) v.st.append(openLink(d.file));
@@ -150,6 +206,10 @@
 
   function renderDownloads(list) {
     $("#dl-section").hidden = !list.length;
+    ahead = Object.fromEntries(list.filter((d) => d.status === "queued").sort((a, b) => a.queued - b.queued).map((d, i) => [d.key, i]));
+    const n = (s) => list.filter((d) => d.status === s).length;
+    $("#dl-count").textContent = [n("busy") && `${n("busy")} downloading`, n("queued") && `${n("queued")} waiting`, n("done") && `${n("done")} done`,
+                                  `${limit} at a time`].filter(Boolean).join(" · ");
     for (const k in views) delete views[k];
     $("#downloads").replaceChildren(...list.map((d, i) => {
       const r = row(d, i);
@@ -217,6 +277,8 @@
     try {
       const s = await (await fetch("/state")).json();
       jobs = s.jobs;
+      limit = s.limit || limit;
+      showBatch(s.batches || []);
       $("#ext-dir").textContent = s.extension_dir;
       showSetup();
       if (!$("#pick").disabled) $("#out").textContent = s.out;
@@ -226,7 +288,8 @@
       s.downloads.forEach((d) => d.status === "busy" && paint(d));
     } catch {}
   }
-  renderCaught([]); poll(); setInterval(poll, 1000);
+  renderCaught([]);
+  (async function loop() { await poll(); setTimeout(loop, $("#batch-pop").open ? 300 : 1000); })();
 </script>
 </body>
 </html>

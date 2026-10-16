@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compressor</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="app comp nofile">
+  <header class="bar">
+    <a class="back" href="/">← Multitool</a>
+    <strong class="app-name">Compress<span>or</span></strong>
+    <label class="filebtn" title="A video, image or GIF"><input type="file" id="file" accept="video/*,image/*,.mkv,.avi">Open…</label>
+    <button type="button" id="undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button type="button" id="redo" title="Redo (Ctrl+Y)">↷ Redo</button>
+    <button type="button" id="revert">Revert</button>
+    <span class="grow"></span>
+    <span class="saveto" title="Exports are saved here">Save to <span class="out" id="out">…</span>
+      <button type="button" class="pick" id="pick">Change</button></span>
+    <button type="button" class="go" id="export" disabled>Export</button>
+    <button type="button" id="pause" hidden>Pause</button>
+    <button type="button" id="stop" hidden aria-label="Cancel the export">✕ Cancel</button>
+  </header>
+
+  <div class="cdesk">
+    <main class="cmain">
+      <div class="stagewrap" id="stagewrap">
+        <div class="stage" id="stage">
+          <div class="view" id="view">
+            <div class="box" id="box" hidden><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+          </div>
+        </div>
+        <label class="drop big cstart" id="drop">
+          <input type="file" id="file2" accept="video/*,image/*,.mkv,.avi">
+          <strong>Drop a file here</strong>
+          <span>or click to choose a video, image or GIF</span>
+          <span class="status err" id="load-error"></span>
+        </label>
+      </div>
+      <div class="vbar" id="vbar" data-kind="video">
+        <button type="button" id="play">▶ Play</button>
+        <span class="time" id="time"></span>
+        <div class="stripwrap" id="timeline"><canvas class="strip" id="strip" aria-hidden="true"></canvas><div class="playhead" id="playhead"></div></div>
+      </div>
+    </main>
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Resize the side panel" tabindex="0" title="Drag to resize"></div>
+    <aside class="side single">
+      <div class="side-top">
+        <details open>
+          <summary>Compress</summary>
+          <div class="pane">
+            <div class="chips" id="goal-mode" role="group" aria-label="Compression">
+              <button type="button" data-g="">Off</button><button type="button" data-g="mb">Size goal</button>
+              <button type="button" data-g="pct">% of the original</button>
+            </div>
+            <div class="fields" id="goal-field" hidden>
+              <label><input type="number" id="goal" min="0.01" step="any"> <span id="goal-unit">MB</span></label>
+            </div>
+            <div class="chips" id="formats" data-kind="image" role="group" aria-label="Format">
+              <button type="button" data-f="">Same format</button><button type="button" data-f="jpg">JPG</button>
+              <button type="button" data-f="webp">WebP</button><button type="button" data-f="png">PNG</button>
+            </div>
+            <p class="hint" id="goal-info"></p>
+          </div>
+        </details>
+        <details open>
+          <summary>Resize</summary>
+          <div class="pane">
+            <div class="fields">
+              <label>W <input type="number" id="rw" min="2"></label><label>H <input type="number" id="rh" min="2"></label>
+              <label><input type="number" id="rp" min="1" max="400"> %</label>
+              <label class="check"><input type="checkbox" id="lock" checked> keep shape</label>
+            </div>
+            <div class="fields" id="fps-field">
+              <label>Frame rate <input type="number" id="fps" min="1" max="120" step="any" placeholder="same"> fps</label>
+            </div>
+          </div>
+        </details>
+        <details open>
+          <summary>Crop</summary>
+          <div class="pane">
+            <p class="hint">Drag on the picture to draw a box, or type the numbers.</p>
+            <div class="chips" id="ratios" role="group" aria-label="Crop shape">
+              <button type="button" data-r="">Free</button><button type="button" data-r="1:1">1:1</button>
+              <button type="button" data-r="16:9">16:9</button><button type="button" data-r="9:16">9:16</button>
+              <button type="button" data-r="4:3">4:3</button><button type="button" data-r="4:5">4:5</button>
+            </div>
+            <div class="fields">
+              <label>W <input type="number" id="cw" min="2"></label><label>H <input type="number" id="ch" min="2"></label>
+              <label>X <input type="number" id="cx" min="0"></label><label>Y <input type="number" id="cy" min="0"></label>
+            </div>
+            <div class="chips">
+              <button type="button" class="go" id="crop-apply" disabled>✓ Apply</button>
+              <button type="button" id="crop-clear" disabled>Clear</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="status-bar">
+    <span id="readout"></span>
+    <progress id="bar" max="1" hidden aria-label="Progress"></progress>
+    <p class="status" id="status"></p>
+  </footer>
+
+<script>
+  // Shrink, resize and crop one video, image or GIF. The preview is the file itself (shown with CSS); only Export
+  // runs ffmpeg on the server, with a size goal reached by two passes (video) or a few tries (images, GIFs).
+  const $ = (s) => document.querySelector(s);
+  const RATIOS = { "1:1": 1, "16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "4:5": 4 / 5 };
+  const blank = () => ({ crop: null, size: null, fps: null, goal: null, format: null });
+  let file = null, kind = "", media = null, natW = 0, natH = 0, duration = 0, k = 1;
+  let jobId = null, job = null, progress = {}, xhr = null, uploaded = null, note = "";
+  let history = [blank()], pos = 0, draft = null, drag = null, cropRatio = "", scrub = false;
+  const cur = () => history[pos];
+  const frame = () => cur().crop || { x: 0, y: 0, w: natW, h: natH };  // the part of the picture still in
+  const even = (n) => (kind === "video" ? Math.max(2, Math.round(n / 2) * 2) : Math.max(1, Math.round(n)));  // H.264 wants even sizes
+  const base = () => { const c = frame(), up = (n) => Math.ceil(n / 2) * 2; return kind === "video" ? [up(c.w), up(c.h)] : [c.w, c.h]; };
+  const size = (n) => {
+    if (n == null) return "?";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(i < 2 ? 0 : 1)} ${units[i]}`;
+  };
+  const clock = (t) => { t = Math.round(t); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0");
+                         return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`; };
+  const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const showFor = () => document.querySelectorAll("[data-kind]").forEach((el) => (el.hidden = el.dataset.kind !== kind));
+
+  // ---- Loading: the browser previews the file right away while it uploads for the export ----
+  function load(f) {
+    if (xhr) xhr.abort();
+    if (jobId) post("/convert/cancel", { id: jobId }).catch(() => {});  // the previous file's upload goes
+    if (media) { URL.revokeObjectURL(media.src); media.remove(); media = null; }
+    $("#load-error").textContent = "";
+    const image = f.type.startsWith("image/");
+    file = f; jobId = null; job = null; draft = null; note = ""; history = [blank()]; pos = 0; cropRatio = "";
+    kind = image ? (f.type === "image/gif" ? "gif" : "image") : "video";
+    media = Object.assign(document.createElement(image ? "img" : "video"), { className: "media", draggable: false });
+    media.addEventListener(image ? "load" : "loadedmetadata", () => {
+      natW = media.naturalWidth || media.videoWidth;
+      natH = media.naturalHeight || media.videoHeight;
+      duration = media.duration || 0;
+      document.body.classList.remove("nofile");
+      showFor();
+      render();
+      if (!image) filmstrip();
+    }, { once: true });
+    media.addEventListener("error", () => {
+      $("#load-error").textContent = `✗ This browser can't show ${f.name}. Convert it to MP4 (or PNG) in the Converter first.`;
+      document.body.classList.add("nofile");
+    }, { once: true });
+    if (!image) {
+      Object.assign(media, { preload: "auto", playsInline: true });
+      for (const ev of ["timeupdate", "play", "pause"]) media.addEventListener(ev, tick);
+    }
+    media.src = URL.createObjectURL(f);
+    $("#view").prepend(media);
+    upload(f);
+  }
+  function upload(f) {  // a web page can't hand the server a real path, so the file goes up
+    const me = (xhr = new XMLHttpRequest());
+    uploaded = 0;
+    me.upload.onprogress = (e) => { if (me === xhr) { uploaded = e.loaded / e.total; note = `uploading · ${size(e.loaded)} / ${size(e.total)}`; renderExport(); } };
+    me.onload = () => {
+      if (me !== xhr) return;
+      uploaded = null;
+      const r = JSON.parse(me.responseText || "{}");
+      if (!r.ok) { note = "✗ upload failed"; return renderExport(); }
+      jobId = r.id;
+      note = "ready to export";
+      if (kind === "gif" && r.kind === "image") { kind = "image"; showFor(); }  // a one-frame GIF is a still image
+      render();
+    };
+    me.onerror = () => { if (me === xhr) { uploaded = null; note = "✗ upload failed: is the server running?"; renderExport(); } };
+    me.open("POST", "/convert/upload");
+    me.setRequestHeader("Content-Type", "application/octet-stream");
+    me.setRequestHeader("X-Filename", encodeURIComponent(f.name));
+    me.setRequestHeader("X-Tool", "compressor");
+    me.send(f);
+  }
+
+  // ---- Preview: the (cropped) picture, as big as the space allows ----
+  function layout() {
+    const c = frame(), area = $("#stagewrap"), stage = $("#stage"), view = $("#view");
+    let sw = area.clientWidth - 40, sh = (sw * c.h) / c.w;
+    if (sh > area.clientHeight - 40) { sh = area.clientHeight - 40; sw = (sh * c.w) / c.h; }
+    k = sw / c.w;  // screen pixels per picture pixel
+    for (const el of [stage, view]) Object.assign(el.style, { width: sw + "px", height: sh + "px" });
+    Object.assign(view.style, { left: 0, top: 0 });
+    Object.assign(media.style, { width: natW * k + "px", height: natH * k + "px", left: -c.x * k + "px", top: -c.y * k + "px" });
+  }
+  function drawBox() {  // the crop box, and the pixel counts (of the box, or of the whole picture)
+    const box = $("#box"), c = frame();
+    box.hidden = !draft;
+    if (draft) Object.assign(box.style, { left: draft.x + "px", top: draft.y + "px", width: draft.w + "px", height: draft.h + "px" });
+    const d = draft ? { cw: draft.w / k, ch: draft.h / k, cx: draft.x / k, cy: draft.y / k } : { cw: c.w, ch: c.h, cx: 0, cy: 0 };
+    for (const [id, v] of Object.entries(d)) if (document.activeElement !== $("#" + id)) $("#" + id).value = Math.round(v);
+    $("#crop-apply").disabled = $("#crop-clear").disabled = !draft;
+  }
+  const view = $("#view");
+  const at = (e) => { const b = view.getBoundingClientRect(); return [Math.min(Math.max(e.clientX - b.left, 0), b.width), Math.min(Math.max(e.clientY - b.top, 0), b.height)]; };
+  view.addEventListener("pointerdown", (e) => {  // drag to draw a box; drag the box to move it; a corner resizes it
+    if (!media || e.button !== 0) return;
+    const [x, y] = at(e), corner = e.target.dataset.h;
+    if (corner) drag = { ax: corner.includes("w") ? draft.x + draft.w : draft.x, ay: corner.includes("n") ? draft.y + draft.h : draft.y };
+    else if (e.target.id === "box") drag = { move: true, dx: x - draft.x, dy: y - draft.y };
+    else { drag = { ax: x, ay: y }; draft = { x, y, w: 0, h: 0 }; }
+    view.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  view.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const [x, y] = at(e), vw = view.clientWidth, vh = view.clientHeight;
+    if (drag.move) {
+      draft.x = Math.min(Math.max(x - drag.dx, 0), vw - draft.w);
+      draft.y = Math.min(Math.max(y - drag.dy, 0), vh - draft.h);
+    } else {
+      const ratio = RATIOS[cropRatio], right = x >= drag.ax, down = y >= drag.ay;
+      let w = Math.abs(x - drag.ax), h = Math.abs(y - drag.ay);
+      if (ratio) { w = Math.min(w, (down ? vh - drag.ay : drag.ay) * ratio, right ? vw - drag.ax : drag.ax); h = w / ratio; }  // a fixed shape stays on the picture
+      draft = { x: right ? drag.ax : drag.ax - w, y: down ? drag.ay : drag.ay - h, w, h };
+    }
+    drawBox();
+  });
+  view.addEventListener("pointerup", () => {
+    if (drag && draft && (draft.w < 4 || draft.h < 4)) draft = null;  // a click, not a box
+    drag = null;
+    drawBox();
+  });
+  $("#ratios").onclick = (e) => {  // a shape: the biggest box of that shape, centered
+    const b = e.target.closest("button");
+    if (!b || !media) return;
+    cropRatio = b.dataset.r;
+    const ratio = RATIOS[cropRatio], vw = view.clientWidth, vh = view.clientHeight;
+    if (ratio) { let w = vw, h = w / ratio; if (h > vh) { h = vh; w = h * ratio; } draft = { x: (vw - w) / 2, y: (vh - h) / 2, w, h }; }
+    render();
+  };
+  for (const id of ["cw", "ch", "cx", "cy"]) $("#" + id).addEventListener("input", () => {  // typed pixel counts
+    const c = frame(), v = (i) => Math.max(0, +$("#" + i).value || 0);
+    const w = Math.min(Math.max(v("cw"), 2), c.w), h = Math.min(Math.max(v("ch"), 2), c.h);
+    draft = { w: w * k, h: h * k, x: Math.min(v("cx"), c.w - w) * k, y: Math.min(v("cy"), c.h - h) * k };
+    drawBox();
+  });
+  $("#crop-apply").onclick = () => {
+    const c = frame(), step = kind === "video" ? 2 : 1, ev = (n) => Math.max(step, Math.floor(Math.round(n) / step) * step);  // 719.999 is 720
+    const x = Math.round(c.x + draft.x / k), y = Math.round(c.y + draft.y / k);
+    const crop = { x, y, w: ev(Math.min(draft.w / k, c.x + c.w - x)), h: ev(Math.min(draft.h / k, c.y + c.h - y)) };
+    draft = null;
+    commit({ ...cur(), crop, size: null });  // a new crop starts the size over
+  };
+  $("#crop-clear").onclick = () => { draft = null; drawBox(); };
+
+  // ---- Size, frame rate, compression ----
+  const outSize = () => (cur().size ? [cur().size.w, cur().size.h] : base());
+  function resize(w, h) { const [bw, bh] = base(); commit({ ...cur(), size: w === bw && h === bh ? null : { w, h } }); }
+  $("#rw").onchange = () => { const [bw, bh] = base(), w = even(+$("#rw").value || bw); resize(w, $("#lock").checked ? even((w * bh) / bw) : even(+$("#rh").value || bh)); };
+  $("#rh").onchange = () => { const [bw, bh] = base(), h = even(+$("#rh").value || bh); resize($("#lock").checked ? even((h * bw) / bh) : even(+$("#rw").value || bw), h); };
+  $("#rp").onchange = () => { const [bw, bh] = base(), p = Math.min(Math.max(+$("#rp").value || 100, 1), 400) / 100; resize(even(bw * p), even(bh * p)); };
+  $("#fps").onchange = () => {  // blank, or the original's rate: unchanged
+    const v = Math.min(Math.max(+$("#fps").value || 0, 0), 120);
+    commit({ ...cur(), fps: v >= 1 && v !== job?.fps ? v : null });
+  };
+  $("#goal-mode").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b || !file) return;
+    const mode = b.dataset.g;  // starts at half the original
+    commit({ ...cur(), goal: mode ? { mode, value: mode === "mb" ? +(file.size / 1048576 / 2).toFixed(2) : 50 } : null });
+  };
+  $("#goal").onchange = () => { const g = cur().goal; if (g) commit({ ...cur(), goal: { ...g, value: Math.max(0.01, +$("#goal").value || g.value) } }); };
+  $("#formats").onclick = (e) => { const b = e.target.closest("button"); if (b) commit({ ...cur(), format: b.dataset.f || null }); };
+  const goalBytes = () => { const g = cur().goal; return g && Math.round(g.mode === "mb" ? g.value * 1048576 : (g.value / 100) * file.size); };
+  function goalInfo() {
+    const bytes = goalBytes(), kbps = bytes && (bytes * 8) / Math.max(duration, 0.1) / 1000 - 128;
+    $("#goal-info").textContent = !bytes ? `Original: ${size(file.size)}`
+      : `${size(file.size)} → ${size(bytes)}` + (kind === "video" ? ` · about ${Math.max(0, Math.round(kbps))} kbps for the picture`
+        + (kbps < 300 ? " — that will look rough" : "") : kind === "gif" ? " · GIFs shrink by getting smaller: MP4 or WebP are far lighter" : "");
+  }
+
+  // ---- Video: a filmstrip to scrub along, play / pause ----
+  const tl = $("#timeline");
+  const seekAt = (e) => { const b = tl.getBoundingClientRect(); media.pause(); media.currentTime = Math.min(Math.max((e.clientX - b.left) / b.width, 0), 1) * duration; tick(); };
+  tl.addEventListener("pointerdown", (e) => { if (!media || e.button !== 0) return; scrub = true; tl.setPointerCapture(e.pointerId); seekAt(e); });
+  tl.addEventListener("pointermove", (e) => scrub && seekAt(e));
+  tl.addEventListener("pointerup", () => (scrub = false));
+  let stripToken = 0;
+  async function filmstrip() {  // frames from a hidden second copy of the video, drawn side by side
+    const token = ++stripToken, canvas = $("#strip"), dpr = devicePixelRatio || 1, W = tl.clientWidth, H = tl.clientHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    const ctx = canvas.getContext("2d"), cell = (H * natW) / natH, n = Math.min(30, Math.ceil(W / cell));
+    const v = Object.assign(document.createElement("video"), { muted: true, preload: "auto", src: media.src });
+    try {
+      await new Promise((ok, fail) => { v.onloadeddata = ok; v.onerror = fail; });
+      for (let i = 0; i < n && token === stripToken; i++) {
+        v.currentTime = Math.min(duration - 0.05, ((i + 0.5) * duration) / n);
+        await new Promise((ok) => (v.onseeked = ok));
+        ctx.drawImage(v, i * cell * dpr, 0, cell * dpr, H * dpr);
+      }
+    } catch {}  // no strip is fine: scrubbing still works
+    v.removeAttribute("src");
+    v.load();
+  }
+  function tick() {
+    if (!media || kind !== "video") return;
+    $("#playhead").style.left = (media.currentTime / duration) * 100 + "%";
+    $("#time").textContent = `${clock(media.currentTime)} / ${clock(duration)}`;
+    $("#play").textContent = media.paused ? "▶ Play" : "❚❚ Pause";
+  }
+  $("#play").onclick = () => (media.paused ? media.play() : media.pause());
+
+  // ---- History: every change is a step; Undo / Redo / Revert and Ctrl+Z / Ctrl+Y walk it ----
+  function commit(r) {
+    history = history.slice(0, pos + 1).concat([r]);
+    pos = history.length - 1;
+    render();
+  }
+  $("#undo").onclick = () => { if (pos > 0) { pos--; draft = null; render(); } };
+  $("#redo").onclick = () => { if (pos < history.length - 1) { pos++; draft = null; render(); } };
+  $("#revert").onclick = () => { draft = null; commit(blank()); };  // revert is a step too, so it can be undone
+  addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !media || e.target.matches("input[type=number]")) return;  // number boxes undo their own typing
+    const key = e.key.toLowerCase();
+    if (key === "z" && !e.shiftKey) { e.preventDefault(); $("#undo").click(); }
+    else if (key === "y" || (key === "z" && e.shiftKey)) { e.preventDefault(); $("#redo").click(); }
+  });
+
+  function render() {
+    if (!media || !natW) return renderExport();
+    const r = cur();
+    layout();
+    drawBox();
+    const pressed = (sel, key, value) => document.querySelectorAll(sel + " button").forEach((b) => (b.ariaPressed = String((b.dataset[key] || "") === (value || ""))));
+    pressed("#ratios", "r", cropRatio);
+    pressed("#goal-mode", "g", r.goal?.mode);
+    pressed("#formats", "f", r.format);
+    const [w, h] = outSize(), [bw] = base();
+    $("#fps-field").hidden = kind === "image";
+    for (const [id, v] of [["rw", w], ["rh", h], ["rp", Math.round((w / bw) * 100)], ["fps", r.fps ?? ""]])
+      if (document.activeElement !== $("#" + id)) $("#" + id).value = v;
+    $("#goal-field").hidden = !r.goal;
+    if (r.goal) { $("#goal").value = r.goal.value; $("#goal-unit").textContent = r.goal.mode === "mb" ? "MB" : "% of the original"; }
+    goalInfo();
+    $("#readout").textContent = [`Output ${w} × ${h} px`, r.fps && `${r.fps} fps`, r.crop && `cropped`, `original ${natW} × ${natH} px · ${size(file.size)}`].filter(Boolean).join(" · ");
+    $("#undo").disabled = pos === 0;
+    $("#redo").disabled = pos === history.length - 1;
+    $("#revert").disabled = JSON.stringify(r) === JSON.stringify(blank());
+    tick();
+    renderExport();
+  }
+  new ResizeObserver(() => media && natW && render()).observe($("#stagewrap"));
+
+  // ---- Export: one job on the server, with progress, pause and cancel ----
+  function target() {
+    if (kind === "video") return "mp4";
+    if (kind === "gif") return "gif";
+    const ext = file.name.split(".").pop().toLowerCase();
+    return cur().format || { jpeg: "jpg", jpg: "jpg", png: "png", webp: "webp" }[ext] || "png";
+  }
+  const recipe = () => ({ crop: cur().crop, size: cur().size, fps: cur().fps, target_bytes: goalBytes() });
+  $("#export").onclick = async () => {
+    const r = await post("/convert/start", { id: jobId, target: target(), recipe: recipe() }).then((res) => res.json()).catch(() => ({ ok: false }));
+    note = r.ok ? "" : "✗ couldn't start the export";
+    poll();
+  };
+  $("#pause").onclick = () => post("/convert/" + (job?.status === "paused" ? "resume" : "pause"), { id: jobId }).catch(() => {}).then(poll);
+  $("#stop").onclick = () => post("/convert/stop", { id: jobId }).catch(() => {}).then(poll);
+  function openLink(path) {  // Explorer opens on the result: a web page can't open local folders itself
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Open folder" });
+    b.onclick = async () => { const r = await post("/open", { file: path }).catch(() => null); if (!r?.ok) b.textContent = "file moved or deleted"; };
+    return b;
+  }
+  function renderExport() {
+    const busy = job && ["queued", "busy", "paused"].includes(job.status), running = job && ["busy", "paused"].includes(job.status);
+    $("#export").disabled = !jobId || !!busy;
+    $("#pause").hidden = !running;
+    $("#pause").textContent = job?.status === "paused" ? "Continue" : "Pause";
+    $("#stop").hidden = !busy;
+    const p = job && progress[job.id], f = p?.total && p.done != null ? Math.min(p.done / p.total, 1) : null;
+    const bar = $("#bar"), st = $("#status"), part = running ? f : uploaded;
+    bar.hidden = !(running || uploaded != null);
+    if (part != null) bar.value = part; else bar.removeAttribute("value");
+    st.className = "status " + (job?.status === "done" ? "ok" : job?.status === "error" || note.startsWith("✗") ? "err" : busy || uploaded != null ? "live" : "");
+    st.textContent = !job || job.status === "ready" ? (uploaded == null && job?.msg) || note
+      : job.status === "queued" ? "queued · waiting for a free slot"
+      : job.status === "busy" ? (!p ? "starting…" : p.unit === "tries" ? `fitting the size goal · try ${p.done}`
+        : [f != null && `${Math.floor(f * 100)}%`, p.speed && p.speed !== "N/A" && `${p.speed.trim()} speed`].filter(Boolean).join(" · ") || "working…")
+      : job.status === "paused" ? "paused" + (f != null ? ` · ${Math.floor(f * 100)}%` : "")
+      : job.status === "done" ? `✓ ${job.msg} · ${size(job.out_size)} (was ${size(file.size)})${job.note ? " — " + job.note : ""}`
+      : "✗ " + job.msg;
+    if (job?.status === "done" && job.file) st.append(" ", openLink(job.file));
+  }
+  async function poll() {
+    try {
+      const s = await (await fetch("/convert/state?tool=compressor")).json();
+      job = (jobId && s.jobs.find((j) => j.id === jobId)) || null;
+      $("#fps").placeholder = job?.fps ? `${job.fps} (same)` : "same";
+      progress = s.progress;
+      if (!$("#pick").disabled) $("#out").textContent = $("#out").title = s.out;
+    } catch {}
+    renderExport();
+  }
+  $("#pick").onclick = async () => {
+    const b = $("#pick");
+    b.disabled = true;
+    b.textContent = "Pick it in the window…";
+    try { const r = await (await post("/folder", { which: "convert_out" })).json(); if (r.ok) $("#out").textContent = $("#out").title = r.out; } catch {}
+    b.disabled = false;
+    b.textContent = "Change";
+  };
+
+  // the side panel's width: drag the divider; remembered in this browser
+  const split = $("#splitter"), sideTo = (w) => { w = Math.round(Math.min(Math.max(w, 260), innerWidth - 420)); document.body.style.setProperty("--side", w + "px"); try { localStorage.setItem("mt-cside", w); } catch {} };
+  try { if (+localStorage.getItem("mt-cside")) sideTo(+localStorage.getItem("mt-cside")); } catch {}
+  split.addEventListener("pointerdown", (e) => { split.setPointerCapture(e.pointerId); split.classList.add("on"); e.preventDefault(); });
+  split.addEventListener("pointermove", (e) => { if (split.hasPointerCapture(e.pointerId)) sideTo(innerWidth - e.clientX - 3); });
+  split.addEventListener("pointerup", () => split.classList.remove("on"));
+  split.addEventListener("keydown", (e) => { const d = { ArrowLeft: 20, ArrowRight: -20 }[e.key]; if (d) { e.preventDefault(); sideTo($(".side").offsetWidth + d); } });
+
+  const drop = $("#drop");  // the whole page takes a drop; the box lights up
+  addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  addEventListener("dragleave", (e) => { if (!e.relatedTarget) drop.classList.remove("over"); });
+  addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]); });
+  for (const id of ["file", "file2"]) $("#" + id).onchange = (e) => { if (e.target.files[0]) load(e.target.files[0]); e.target.value = ""; };
+  poll();
+  setInterval(poll, 1000);
+</script>
+</body>
+</html>

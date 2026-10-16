@@ -1,0 +1,1139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Video editor</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="app video nomedia">
+  <header class="bar">
+    <a class="back" href="/">← Multitool</a>
+    <strong class="app-name">Video edit<span>or</span></strong>
+    <label class="filebtn" title="Videos, images and sound (Ctrl+O)"><input type="file" id="file" accept="video/*,image/*,audio/*,.mkv,.avi,.mtvid" multiple>Add media…</label>
+    <label class="filebtn" title="Open a saved timeline (.mtvid)"><input type="file" id="open-project" accept=".mtvid">Open project…</label>
+    <button type="button" id="save-project" title="Save the timeline to keep editing later (Ctrl+Shift+S)">Save project</button>
+    <button type="button" id="undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button type="button" id="redo" title="Redo (Ctrl+Y)">↷ Redo</button>
+    <span class="grow"></span>
+    <span class="saveto" title="Exports and projects are saved here">Save to <span class="out" id="out">…</span>
+      <button type="button" class="pick" id="pick">Change</button></span>
+    <button type="button" class="go" id="export" title="Export (Ctrl+S)">Export</button>
+    <button type="button" id="pause" hidden>Pause</button>
+    <button type="button" id="cancel" hidden>✕ Cancel</button>
+  </header>
+
+  <div class="vdesk">
+    <main class="work" id="work">
+      <div class="paper" id="paper"></div>
+      <canvas id="canvas"></canvas>
+      <div class="crop-area" id="crop-area"><div class="box" id="box" hidden><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div>
+      <div class="sel" id="sel" hidden>
+        <i data-s="nw"></i><i data-s="ne"></i><i data-s="sw"></i><i data-s="se"></i>
+        <b class="spin" title="Drag to rotate · Shift: 15° steps"></b>
+      </div>
+      <div class="start" id="start">
+        <strong class="start-title">Video edit<span>or</span></strong>
+        <div class="start-btns"><label class="filebtn"><input type="file" id="file2" accept="video/*,image/*,audio/*,.mkv,.avi,.mtvid" multiple>＋ Add videos, images or sound</label></div>
+        <div class="dropzone">Drop files here · they line up on the timeline · or drop a saved project</div>
+      </div>
+    </main>
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Resize the side panel" tabindex="0" title="Drag to resize"></div>
+    <aside class="side single">
+      <div class="side-top">
+        <details open>
+          <summary>Clip</summary>
+          <div class="pane" id="clip-pane">
+            <p class="hint" id="clip-info">Click a clip on the timeline to edit it.</p>
+            <div id="clip-text">
+              <textarea id="tx-value" rows="2" aria-label="Text"></textarea>
+              <div class="fields">
+                <select id="tx-font" aria-label="Font"></select>
+                <label>Size <input type="number" id="tx-size" min="4" max="1000"></label>
+                <label>Color <input type="color" id="tx-color"></label>
+              </div>
+              <div class="chips">
+                <button type="button" id="tx-bold" aria-label="Bold"><b>B</b></button><button type="button" id="tx-italic" aria-label="Italic"><i>I</i></button>
+                <span class="chips" id="tx-align" role="group" aria-label="Alignment"><button type="button" data-a="left">Left</button><button type="button" data-a="center">Center</button><button type="button" data-a="right">Right</button></span>
+              </div>
+              <div class="fields"><label class="check"><input type="checkbox" id="tx-bg-on"> Box behind</label><input type="color" id="tx-bg" value="#000000" aria-label="Box color"></div>
+            </div>
+            <div id="clip-pic">
+              <div class="fields">
+                <label>X <input type="number" id="cx"></label><label>Y <input type="number" id="cy"></label>
+                <label>W <input type="number" id="cw" min="2"></label><label>H <input type="number" id="ch" min="2"></label>
+                <label>∠ <input type="number" id="angle" step="1"> °</label>
+              </div>
+              <div class="chips">
+                <button type="button" id="fit">Fit</button><button type="button" id="fill">Fill</button>
+                <button type="button" id="rot-l" aria-label="Rotate left 90 degrees">⟲ 90°</button>
+                <button type="button" id="rot-r" aria-label="Rotate right 90 degrees">⟳ 90°</button>
+                <button type="button" id="flip-h">↔ Mirror</button><button type="button" id="flip-v">↕ Flip</button>
+              </div>
+              <div class="chips" id="crop-row">
+                <button type="button" id="crop">Crop…</button><button type="button" id="crop-reset">Uncrop</button>
+                <button type="button" class="go" id="crop-apply" hidden>✓ Apply crop</button><button type="button" id="crop-cancel" hidden>Cancel</button>
+              </div>
+              <label class="slide"><span>Opacity</span><input type="range" id="opacity" min="0" max="100" value="100"><output></output></label>
+            </div>
+            <div class="fields" id="clip-time">
+              <label>Fade in <input type="number" id="fade-in" min="0" step="0.1"> s</label>
+              <label>Fade out <input type="number" id="fade-out" min="0" step="0.1"> s</label>
+              <label id="speed-row">Speed <input type="number" id="speed" min="0.25" max="4" step="0.05"> ×</label>
+            </div>
+            <div id="clip-sound">
+              <label class="slide"><span>Volume</span><input type="range" id="volume" min="0" max="200" value="100"><output></output></label>
+              <div class="chips"><button type="button" id="mute">Mute clip</button></div>
+            </div>
+            <p class="hint" id="clip-link"></p>
+          </div>
+        </details>
+        <details open>
+          <summary>Project</summary>
+          <div class="pane">
+            <div class="chips" id="canvas-shape" role="group" aria-label="Canvas shape">
+              <button type="button" data-c="">Original</button><button type="button" data-c="16:9">16:9</button>
+              <button type="button" data-c="9:16">9:16</button><button type="button" data-c="1:1">1:1</button>
+              <button type="button" data-c="4:3">4:3</button><button type="button" data-c="4:5">4:5</button>
+            </div>
+            <div class="fields">
+              <label>Frame rate <input type="number" id="fps" min="1" max="120" step="any"> fps</label>
+            </div>
+            <div class="fields">
+              <label>Output W <input type="number" id="ow" min="16"></label><label>H <input type="number" id="oh" min="16"></label>
+              <button type="button" class="link" id="o-reset">canvas size</button>
+            </div>
+            <p class="hint" id="proj-info"></p>
+          </div>
+        </details>
+        <details open>
+          <summary>Media</summary>
+          <div class="pane">
+            <ol class="bin" id="media"></ol>
+            <p class="hint">Drag a file onto a track, or use Add to place it at the playhead.</p>
+          </div>
+        </details>
+      </div>
+    </aside>
+  </div>
+
+  <div class="hsplit" id="hsplit" role="separator" aria-orientation="horizontal" aria-label="Resize the timeline" tabindex="0" title="Drag to resize"></div>
+  <section class="tl" aria-label="Timeline">
+    <div class="tl-bar">
+      <button type="button" id="play" title="Space">▶ Play</button>
+      <span class="time" id="time">0:00.0 / 0:00.0</span>
+      <button type="button" id="split" title="Split at the playhead (S, Ctrl+K or Ctrl+B)">Split</button>
+      <button type="button" id="del" title="Delete">Delete</button>
+      <button type="button" id="unlink" title="Separate a video from its sound: they move, trim and split on their own">Unlink</button>
+      <button type="button" id="crossfade" title="Overlap the selected clip with the one before it on its track, and fade between them (1 s)">Crossfade</button>
+      <button type="button" id="add-text" title="A text clip at the playhead">＋ Text</button>
+      <button type="button" id="add-v">＋ Video track</button><button type="button" id="add-a">＋ Audio track</button>
+      <label class="check"><input type="checkbox" id="snap" checked> snap</label>
+      <span class="grow"></span>
+      <label class="slide"><span>Zoom</span><input type="range" id="zoom" min="0" max="100" value="40"><output></output></label>
+    </div>
+    <div class="tl-scroll" id="tl-scroll">
+      <div class="tl-grid" id="grid">
+        <div class="tl-row ruler-row"><div class="thead"></div><div class="ruler" id="ruler"></div></div>
+        <div id="rows"></div>
+        <div class="playhead" id="ph"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="adding" id="adding" hidden role="dialog" aria-label="Adding files to the timeline">
+    <div class="card">
+      <h3>Adding to the timeline</h3>
+      <ol id="adding-list"></ol>
+      <div class="acts"><button type="button" id="adding-hide" title="It keeps going; each file lands when it's ready">Hide · keep going</button></div>
+    </div>
+  </div>
+
+  <footer class="status-bar">
+    <span id="readout"></span>
+    <progress id="bar" max="1" hidden aria-label="Export progress"></progress>
+    <p class="status" id="status"></p>
+  </footer>
+
+<script>
+  // A small non-linear editor. Tracks hold clips: pieces of uploaded files (or text) placed in time, each with its own
+  // place on the canvas, opacity, speed, volume and fades. The preview plays them in the browser; Export sends the
+  // layout to the server, which builds the whole thing with ffmpeg in one run. Higher picture tracks draw on top; clips
+  // on one track may overlap (the later one on top). A video's sound becomes a linked clip on an audio track.
+  const $ = (s) => document.querySelector(s);
+  const HEAD = 156;  // track name column, px
+  const FONTS = ["Arial", "Segoe UI", "Helvetica", "Verdana", "Tahoma", "Trebuchet MS", "Georgia", "Times New Roman", "Garamond",
+                 "Courier New", "Consolas", "Impact", "Comic Sans MS"];
+  const work = $("#work");
+  let media = [], proj = { canvas: null, fps: 30, fpsSet: false, size: null, tracks: [] }, history = [], labels = [], pos = -1;
+  let nextId = 1, t = 0, playing = false, clock0 = 0, t0 = 0, selected = null, ks = 1, ox = 0, oy = 0, pps = 30, projName = "";
+  let grab = null, tdrag = null, scrub = false, cropping = null, cdrag = null, exportId = null, job = null, progress = {};
+  const els = new Map();  // clip id → its <video> / <audio> / <img>
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  const val = (id) => +$("#" + id).value;
+  const mediaOf = (c) => (c.media == null ? null : media.find((m) => m.id === c.media));
+  const kindOf = (c) => (c.t ? "text" : mediaOf(c)?.kind);
+  const trackKind = (m) => (m.kind === "audio" ? "audio" : "video");  // which kind of track a file goes on
+  const nameOf = (c) => (c.t ? "T  " + (c.t.value.split("\n")[0] || "text") : mediaOf(c)?.name || "?");
+  const len = (c) => (c.out - c.in) / (c.speed || 1);  // on the timeline (in / out are times in the file)
+  const maxOut = (c) => (c.t || kindOf(c) === "image" ? Infinity : mediaOf(c).duration);
+  const trackOf = (c) => proj.tracks.find((tr) => tr.clips.includes(c));
+  const allClips = () => proj.tracks.flatMap((tr) => tr.clips);
+  const clipById = (id) => allClips().find((c) => c.id === id);
+  const sel = () => clipById(selected);
+  const mates = (c) => (c.link ? allClips().filter((x) => x !== c && x.link === c.link) : []);  // its linked picture / sound
+  const silent = (c, tr) => c.mute || c.detached || tr.muted;  // a detached video's sound plays from its own clip
+  const ramp = (c) => { const s = t - c.start; return clamp(Math.min(c.fadeIn ? s / c.fadeIn : 1, c.fadeOut ? (len(c) - s) / c.fadeOut : 1), 0, 1); };
+  const end = () => Math.max(0, ...allClips().map((c) => c.start + len(c)));
+  const stamp = (s) => { const d = Math.floor(s * 10 + 1e-6); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, "0")}.${d % 10}`; };  // tenths, without float slips
+  const size = (n) => (n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+  const note = (msg, kind = "") => { $("#status").className = "status " + kind; $("#status").textContent = msg; };
+  const post = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const newTrack = (kind) => ({ id: nextId++, kind, muted: false, hidden: false, clips: [] });
+  const newClip = (f) => ({ id: nextId++, start: 0, in: 0, out: 5, x: 0, y: 0, w: 2, h: 2, rot: 0, flipH: false, flipV: false, crop: null,
+                            mute: false, speed: 1, opacity: 1, volume: 1, fadeIn: 0, fadeOut: 0, ...f });
+
+  // ---- History: the whole project (it's small: no pixels) per step ----
+  function commit(label) {
+    history = history.slice(0, pos + 1).concat([structuredClone(proj)]);
+    labels = labels.slice(0, pos + 1).concat([label]);
+    pos = history.length - 1;
+    render();
+  }
+  function goTo(i) {
+    if (i < 0 || i >= history.length) return;
+    pos = i;
+    proj = structuredClone(history[pos]);
+    if (!clipById(selected)) selected = null;
+    cropping = null;
+    seek(t);
+    render();
+  }
+
+  // ---- Canvas: the first picture's own shape, or a chosen shape at its short side (like the export) ----
+  function canvasDims() {
+    const m = media.find((x) => x.kind !== "audio" && x.w), bw = m ? m.w : 1920, bh = m ? m.h : 1080, up = (n) => Math.ceil(n / 2) * 2;
+    if (!proj.canvas) return [up(bw), up(bh)];
+    const [a, b] = proj.canvas.split(":").map(Number), s = Math.min(bw, bh);
+    return a >= b ? [up((s * a) / b), up(s)] : [up(s), up((s * b) / a)];
+  }
+  const srcSize = (c) => (c.t ? textSize(c.t) : c.crop || { w: mediaOf(c).w, h: mediaOf(c).h });
+  function fitClip(c, fill) {  // centered, as big as fits (or just covering), counting the rotation
+    const k = srcSize(c), [cw, ch] = canvasDims(), r = (c.rot * Math.PI) / 180;
+    const bw = Math.abs(k.w * Math.cos(r)) + Math.abs(k.h * Math.sin(r)), bh = Math.abs(k.w * Math.sin(r)) + Math.abs(k.h * Math.cos(r));
+    const s = (fill ? Math.max : Math.min)(cw / bw, ch / bh), w = Math.max(2, Math.round((k.w * s) / 2) * 2), h = Math.max(2, Math.round((k.h * s) / 2) * 2);
+    Object.assign(c, { w, h, x: Math.round((cw - w) / 2), y: Math.round((ch - h) / 2) });
+  }
+
+  // ---- Text clips: drawn from their settings, at the size they're shown, so they stay sharp ----
+  const textCache = new Map();
+  function renderText(tx, scale = 1) {
+    const key = JSON.stringify(tx) + "@" + scale.toFixed(3);
+    if (textCache.has(key)) return textCache.get(key);
+    if (textCache.size > 300) textCache.clear();
+    const px = Math.max(1, tx.size * scale), font = `${tx.italic ? "italic " : ""}${tx.bold ? "bold " : ""}${px}px "${tx.font}"`, lines = tx.value.split("\n");
+    const c = document.createElement("canvas"), ctx = c.getContext("2d"), lh = px * 1.25, pad = Math.ceil(px * (tx.bg ? 0.4 : 0.15));
+    ctx.font = font;
+    c.width = Math.ceil(Math.max(1, ...lines.map((s) => ctx.measureText(s).width))) + pad * 2;
+    c.height = Math.ceil(lh * lines.length) + pad * 2;
+    if (tx.bg) { ctx.fillStyle = tx.bg; ctx.fillRect(0, 0, c.width, c.height); }
+    Object.assign(ctx, { font, fillStyle: tx.color, textBaseline: "middle", textAlign: tx.align });
+    const x = tx.align === "left" ? pad : tx.align === "right" ? c.width - pad : c.width / 2;
+    lines.forEach((s, i) => ctx.fillText(s, x, pad + lh * (i + 0.5)));
+    textCache.set(key, c);
+    return c;
+  }
+  const textSize = (tx) => { const c = renderText(tx, 1); return { w: c.width, h: c.height }; };
+
+  // ---- Media: files are previewed straight from disk and uploaded in the background for the export ----
+  function typeOf(f) {
+    if (f.type.startsWith("audio/")) return "audio";
+    if (f.type.startsWith("image/")) return "image";
+    return f.type.startsWith("video/") || /\.(mkv|avi)$/i.test(f.name) ? "video" : null;
+  }
+  // Files reach the timeline in the order they were added, each once it's ready: a video waits for its upload, so the
+  // server can tell whether it has sound (then picture and sound land together). The popup shows how each is doing.
+  let adds = [];
+  async function addFiles(files) {
+    const project = files.find((f) => /\.mtvid$/i.test(f.name));
+    if (project) return openProject(project);
+    for (const f of files) {
+      const kind = typeOf(f), a = { name: f.name };
+      adds.push(a);
+      showAdding();
+      if (!kind) { a.err = "not a video, image or sound file"; continue; }
+      const lost = media.find((m) => m.missing && m.name === f.name && m.size === f.size);  // a saved project's file, found again
+      const m = lost || { id: nextId++, name: f.name, size: f.size, kind, w: 0, h: 0, duration: kind === "image" ? Infinity : 0, job: null };
+      Object.assign(m, { url: URL.createObjectURL(f), file: f, up: 0, err: null });
+      try {
+        if (kind === "image") {
+          m.img = new Image();
+          m.img.src = m.url;
+          await m.img.decode();
+          m.w = m.img.naturalWidth; m.h = m.img.naturalHeight;
+        } else {
+          const el = Object.assign(document.createElement(kind === "audio" ? "audio" : "video"), { preload: "metadata", src: m.url });
+          await new Promise((ok, fail) => { el.onloadedmetadata = ok; el.onerror = fail; });
+          m.duration = el.duration; m.w = el.videoWidth || 0; m.h = el.videoHeight || 0;
+        }
+      } catch {
+        a.err = "this browser can't play it: convert it to MP4 (or PNG / MP3) in the Converter first";
+        URL.revokeObjectURL(m.url);
+        m.url = null;
+        continue;
+      }
+      a.m = m;
+      if (lost) { m.missing = false; a.done = a.relinked = true; } else media.push(m);
+      previews(m);
+      upload(m, f);
+      drain();
+    }
+    render();
+    seek(t);
+  }
+  const ready = (m) => m.kind !== "video" || m.audio != null;
+  function queue(m, track = null, start = null) {  // Add / drag from the media list: right away if it's ready
+    if (ready(m)) return placeClip(m, track, start);
+    adds.push({ name: m.name, m, track, start });
+    showAdding();
+  }
+  function drain() {  // place what's ready, in order: a file waits for the ones before it
+    for (const a of adds) {
+      if (a.done || a.err) continue;
+      if (a.m?.err) { a.err = a.m.err; continue; }
+      if (!a.m || !ready(a.m)) break;
+      placeClip(a.m, a.track, a.start);
+      a.done = true;
+    }
+    showAdding();
+  }
+  let addingHidden = false, closing = null;
+  function showAdding() {
+    const box = $("#adding"), left = adds.filter((a) => !a.done && !a.err);
+    $("#adding-list").replaceChildren(...adds.map((a) => {
+      const m = a.m, li = document.createElement("li"), bar = document.createElement("progress");
+      const step = a.err ? `✗ ${a.err}` : a.relinked ? "✓ found: back in the project" : a.done
+        ? (m.kind === "video" ? (m.audio ? "✓ on the timeline · its sound on an audio track" : "✓ on the timeline · it has no sound") : "✓ on the timeline")
+        : !m ? "reading the file…" : m.up != null && m.up < 1 ? `uploading · ${Math.round(m.up * 100)}%` : !ready(m) ? "looking for its sound…" : "waiting for the files before it…";
+      li.className = a.err ? "err" : a.done ? "ok" : "";
+      li.append(Object.assign(document.createElement("span"), { className: "n", textContent: a.name }), Object.assign(document.createElement("span"), { className: "s", textContent: step }));
+      bar.max = 1;
+      if (a.done || a.err) bar.value = 1; else if (m?.up != null) bar.value = m.up; else bar.removeAttribute("value");
+      if (!a.err) li.append(bar);
+      return li;
+    }));
+    clearTimeout(closing);
+    if (left.length) box.hidden = addingHidden;
+    else if (adds.length) closing = setTimeout(() => {  // all in: it goes away (errors stay until closed)
+      if (adds.some((a) => a.err)) return ($("#adding-hide").textContent = "Close");
+      box.hidden = true; adds = []; addingHidden = false;
+    }, 900);
+  }
+  $("#adding-hide").onclick = () => {
+    $("#adding").hidden = true;
+    if (adds.every((a) => a.done || a.err)) { adds = []; addingHidden = false; $("#adding-hide").textContent = "Hide · keep going"; }
+    else addingHidden = true;
+  };
+  function placeClip(m, track = null, start = null) {  // at the end of the first track that takes it, unless told where
+    let tr = track || proj.tracks.find((x) => x.kind === trackKind(m));
+    if (!tr) { tr = newTrack(trackKind(m)); tr.kind === "audio" ? proj.tracks.push(tr) : proj.tracks.unshift(tr); }
+    const c = newClip({ media: m.id, start: start ?? Math.max(0, ...tr.clips.map((x) => x.start + len(x))), out: m.kind === "image" ? 5 : m.duration });
+    if (m.kind !== "audio") fitClip(c);
+    tr.clips.push(c);
+    if (m.kind === "video" && m.audio) detach(c);  // picture and sound land together, linked
+    selected = c.id;
+    commit("Add clip");
+    seek(t);
+  }
+  function detach(c) {  // the video's sound becomes its own clip on an audio track, linked to the picture
+    let at = proj.tracks.find((x) => x.kind === "audio");
+    if (!at) proj.tracks.push((at = newTrack("audio")));
+    c.link = nextId++;
+    c.detached = true;
+    at.clips.push(newClip({ media: c.media, start: c.start, in: c.in, out: c.out, link: c.link }));
+  }
+  function upload(m, f) {  // a web page can't hand the server a real path, so the file goes up
+    const x = new XMLHttpRequest();
+    x.upload.onprogress = (e) => { m.up = e.loaded / e.total; renderMedia(); showAdding(); };
+    x.onload = () => {
+      const r = JSON.parse(x.responseText || "{}");
+      if (r.ok) { m.job = r.id; m.up = null; } else m.err = "upload failed";
+      render();
+      poll();  // whether it has sound: no need to wait for the next round
+    };
+    x.onerror = () => { m.err = "upload failed: is the server running?"; m.up = null; render(); drain(); };
+    x.open("POST", "/convert/upload");
+    x.setRequestHeader("Content-Type", "application/octet-stream");
+    x.setRequestHeader("X-Filename", encodeURIComponent(f.name));
+    x.setRequestHeader("X-Tool", "editor");
+    x.send(f);
+  }
+  async function previews(m) {  // a filmstrip for pictures, a waveform for sound, drawn on the clips
+    const blobUrl = (c, type, q) => new Promise((ok) => c.toBlob((b) => ok(URL.createObjectURL(b)), type, q));
+    if (m.kind === "video") try {  // frames spread over the file; the timeline tiles them at their own shape
+      const v = Object.assign(document.createElement("video"), { muted: true, preload: "auto", src: m.url }), n = clamp(Math.ceil(m.duration / 2), 4, 120);
+      const H = 56, W = Math.max(8, Math.round((H * m.w) / m.h));
+      await new Promise((ok, fail) => { v.onloadeddata = ok; v.onerror = fail; });
+      m.frames = [];
+      m.fstep = m.duration / n;
+      for (let i = 0; i < n; i++) {
+        v.currentTime = Math.min(m.duration - 0.05, (i + 0.5) * m.fstep);
+        await new Promise((ok) => (v.onseeked = ok));
+        const f = Object.assign(document.createElement("canvas"), { width: W, height: H });
+        f.getContext("2d").drawImage(v, 0, 0, W, H);
+        m.frames.push(f);
+        if (i % 10 === 9) soonTimeline();  // show them as they come
+      }
+      v.removeAttribute("src");
+      v.load();
+    } catch {}
+    if (m.kind !== "image" && m.file.size < 400 * 2 ** 20) try {  // ponytail: decodes the whole file in memory, so big files go without
+      const data = await new OfflineAudioContext(1, 1, 22050).decodeAudioData(await m.file.arrayBuffer()), ch = data.getChannelData(0);
+      const N = 2400, step = Math.max(1, Math.floor(ch.length / N)), c = Object.assign(document.createElement("canvas"), { width: N, height: 48 }), ctx = c.getContext("2d");
+      ctx.fillStyle = "rgba(255,255,255,.6)";
+      for (let i = 0; i < N; i++) {
+        let peak = 0;
+        for (let j = i * step; j < (i + 1) * step && j < ch.length; j += 8) peak = Math.max(peak, Math.abs(ch[j]));
+        const h = Math.max(1, peak * 44);
+        ctx.fillRect(i, 24 - h / 2, 1, h);
+      }
+      m.wave = await blobUrl(c, "image/png");
+    } catch {}  // no sound in it
+    renderTimeline();
+  }
+
+  // ---- Preview: every clip has its own media element; the clock is the page's, the elements follow it ----
+  function elFor(c) {
+    const m = mediaOf(c);
+    if (!m || !m.url) return null;  // text, or a project's file not added yet
+    let el = els.get(c.id);
+    if (el && el.dataset.src === m.url) return el;
+    if (m.kind === "image") el = m.img;
+    else {
+      el = document.createElement(m.kind === "audio" ? "audio" : "video");
+      Object.assign(el, { src: m.url, preload: "auto", playsInline: true });
+      el.addEventListener("seeked", soon);
+      el.addEventListener("loadeddata", soon);
+    }
+    el.dataset.src = m.url;
+    els.set(c.id, el);
+    return el;
+  }
+  const activeAt = (c, s) => c.start <= s && s < c.start + len(c);
+  function sync(force) {  // each element at the right spot, speed and volume, playing or not
+    const live = new Set();
+    for (const tr of proj.tracks) for (const c of tr.clips) {
+      const el = elFor(c);
+      if (!el || el.tagName === "IMG") continue;
+      live.add(c.id);
+      const sp = c.speed || 1;
+      if (activeAt(c, t)) {
+        const want = c.in + (t - c.start) * sp;
+        if (force || Math.abs(el.currentTime - want) > 0.25 * sp) el.currentTime = want;
+        el.playbackRate = sp;
+        el.muted = silent(c, tr);
+        el.volume = clamp(c.volume * ramp(c), 0, 1);  // ponytail: above 100% plays at 100% here; the export has the boost
+        if (playing && el.paused) el.play().catch(() => {});
+        if (!playing && !el.paused) el.pause();
+      } else {
+        if (!el.paused) el.pause();
+        if (playing && c.start > t && c.start - t < 1 && Math.abs(el.currentTime - c.in) > 0.1) el.currentTime = c.in;  // ready in time
+      }
+    }
+    for (const [id, el] of els) if (!live.has(id) && el.tagName !== "IMG") { el.pause(); el.removeAttribute("src"); el.load(); els.delete(id); }
+  }
+  let queued = false;
+  function soon() { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; drawFrame(); }); } }
+  function seek(s) {
+    t = clamp(s, 0, Math.max(end(), 0));
+    if (playing) { t0 = t; clock0 = performance.now(); }
+    sync(true);
+    drawFrame();
+    playhead();
+  }
+  function play() {
+    if (playing) return stop();
+    if (t >= end() - 0.05) t = 0;
+    playing = true;
+    t0 = t; clock0 = performance.now();
+    sync(true);
+    $("#play").textContent = "❚❚ Pause";
+    requestAnimationFrame(tick);
+  }
+  function stop() {
+    playing = false;
+    sync(false);
+    $("#play").textContent = "▶ Play";
+  }
+  function tick() {
+    if (!playing) return;
+    t = t0 + (performance.now() - clock0) / 1000;
+    if (t >= end()) { t = end(); stop(); }
+    sync(false);
+    drawFrame();
+    playhead(true);
+    requestAnimationFrame(tick);
+  }
+
+  function drawFrame() {
+    const W = work.clientWidth, H = work.clientHeight, dpr = devicePixelRatio || 1, cv = $("#canvas");
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (document.body.classList.contains("nomedia")) return;
+    if (cropping) return drawCrop(ctx, W, H, dpr);
+    const [cw, ch] = canvasDims();
+    ks = Math.min((W - 40) / cw, (H - 40) / ch);
+    ox = (W - cw * ks) / 2; oy = (H - ch * ks) / 2;
+    const rect = { left: ox + "px", top: oy + "px", width: cw * ks + "px", height: ch * ks + "px" };
+    Object.assign($("#paper").style, rect);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox * dpr, oy * dpr, cw * ks * dpr, ch * ks * dpr);
+    ctx.clip();
+    for (const tr of proj.tracks.filter((x) => x.kind === "video").reverse()) {  // the bottom track first
+      if (tr.hidden) continue;
+      for (const c of [...tr.clips].sort((a, b) => a.start - b.start)) if (activeAt(c, t)) drawClip(ctx, c, dpr);
+    }
+    ctx.restore();
+    frameBox();
+  }
+  function drawClip(ctx, c, dpr) {
+    let src, k;
+    if (c.t) { src = renderText(c.t, Math.max(0.02, c.w / textSize(c.t).w)); k = { x: 0, y: 0, w: src.width, h: src.height }; }
+    else {
+      const m = mediaOf(c);
+      src = elFor(c);
+      if (!src || (src.tagName === "VIDEO" && src.readyState < 2)) return;
+      k = c.crop || { x: 0, y: 0, w: m.w, h: m.h };
+    }
+    ctx.save();
+    ctx.globalAlpha = clamp(c.opacity * ramp(c), 0, 1);
+    ctx.setTransform(ks * dpr, 0, 0, ks * dpr, ox * dpr, oy * dpr);
+    ctx.translate(c.x + c.w / 2, c.y + c.h / 2);
+    ctx.rotate((c.rot * Math.PI) / 180);
+    ctx.scale(c.flipH ? -1 : 1, c.flipV ? -1 : 1);  // cropped first, then mirrored: the same order as the export
+    ctx.drawImage(src, k.x, k.y, k.w, k.h, -c.w / 2, -c.h / 2, c.w, c.h);
+    ctx.restore();
+  }
+  function frameBox() {  // the selected clip's frame on the preview: drag to move, corners resize, the dot rotates
+    const s = $("#sel"), c = sel(), tr = c && trackOf(c);
+    s.hidden = !c || tr.kind === "audio" || tr.hidden || !activeAt(c, t) || !!cropping;
+    if (s.hidden) return;
+    Object.assign(s.style, { left: ox + c.x * ks + "px", top: oy + c.y * ks + "px", width: c.w * ks + "px", height: c.h * ks + "px",
+                             transform: `rotate(${c.rot}deg)` });
+  }
+  work.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || document.body.classList.contains("nomedia")) return;
+    if (cropping) return cropDown(e);
+    if (!e.target.closest("#sel")) {  // click a picture to select its clip (the topmost one showing there)
+      const b = work.getBoundingClientRect(), px = (e.clientX - b.left - ox) / ks, py = (e.clientY - b.top - oy) / ks;
+      const hit = proj.tracks.filter((x) => x.kind === "video" && !x.hidden).flatMap((tr) => [...tr.clips].sort((a, b2) => b2.start - a.start))
+        .find((c) => { if (!activeAt(c, t)) return false; const r = (-c.rot * Math.PI) / 180, dx = px - c.x - c.w / 2, dy = py - c.y - c.h / 2;
+                       return Math.abs(dx * Math.cos(r) - dy * Math.sin(r)) <= c.w / 2 && Math.abs(dx * Math.sin(r) + dy * Math.cos(r)) <= c.h / 2; });
+      if (!hit) return;
+      selected = hit.id;
+      render();
+    }
+    const b = $("#sel").getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    grab = { mode: e.target.classList.contains("spin") ? "turn" : e.target.dataset.s ? "scale" : "move", x0: e.clientX, y0: e.clientY,
+             cx, cy, d0: Math.hypot(e.clientX - cx, e.clientY - cy) || 1, c0: { ...sel() }, moved: false };
+    work.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  work.addEventListener("pointermove", (e) => {
+    if (cdrag) return cropMove(e);
+    if (!grab) return;
+    const g = grab, c0 = g.c0, c = sel();
+    g.moved = true;
+    if (g.mode === "move") Object.assign(c, { x: Math.round(c0.x + (e.clientX - g.x0) / ks), y: Math.round(c0.y + (e.clientY - g.y0) / ks) });
+    else if (g.mode === "scale") {
+      const s = Math.max(0.02, Math.hypot(e.clientX - g.cx, e.clientY - g.cy) / g.d0);
+      Object.assign(c, { w: Math.max(2, Math.round((c0.w * s) / 2) * 2), h: Math.max(2, Math.round((c0.h * s) / 2) * 2) });
+      Object.assign(c, { x: Math.round(c0.x + (c0.w - c.w) / 2), y: Math.round(c0.y + (c0.h - c.h) / 2) });
+    } else {
+      let deg = ((Math.atan2(e.clientY - g.cy, e.clientX - g.cx) * 180) / Math.PI + 90 + 360) % 360;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      else for (const snap of [0, 90, 180, 270, 360]) if (Math.abs(deg - snap) < 4) deg = snap;
+      c.rot = Math.round((deg % 360) * 10) / 10;
+    }
+    drawFrame();
+    panels();
+  });
+  work.addEventListener("pointerup", () => {
+    if (cdrag) return (cdrag = null);
+    if (grab?.moved) commit({ move: "Move", scale: "Resize", turn: "Rotate" }[grab.mode]);
+    grab = null;
+  });
+  work.addEventListener("dblclick", () => { if (sel()?.t) $("#tx-value").focus(); });
+
+  // ---- Crop: the selected clip's whole picture, with a box on it ----
+  let cview = null;  // where the source picture sits on screen while cropping
+  function drawCrop(ctx, W, H, dpr) {
+    const c = sel(), m = mediaOf(c), el = elFor(c), s = Math.min((W - 40) / m.w, (H - 40) / m.h);
+    cview = { s, x: (W - m.w * s) / 2, y: (H - m.h * s) / 2, m };
+    const rect = { left: cview.x + "px", top: cview.y + "px", width: m.w * s + "px", height: m.h * s + "px" };
+    Object.assign($("#paper").style, rect);
+    Object.assign($("#crop-area").style, rect);
+    if (el && (el.tagName !== "VIDEO" || el.readyState >= 2)) ctx.drawImage(el, cview.x * dpr, cview.y * dpr, m.w * s * dpr, m.h * s * dpr);
+    const d = cropping.draft, box = $("#box");
+    box.hidden = false;
+    Object.assign(box.style, { left: d.x * s + "px", top: d.y * s + "px", width: d.w * s + "px", height: d.h * s + "px" });
+    $("#sel").hidden = true;
+  }
+  const srcAt = (e) => { const b = work.getBoundingClientRect(), m = cview.m;
+                         return [clamp((e.clientX - b.left - cview.x) / cview.s, 0, m.w), clamp((e.clientY - b.top - cview.y) / cview.s, 0, m.h)]; };
+  function cropDown(e) {
+    const [x, y] = srcAt(e), d = cropping.draft, corner = e.target.dataset.h;
+    if (corner) cdrag = { ax: corner.includes("w") ? d.x + d.w : d.x, ay: corner.includes("n") ? d.y + d.h : d.y };
+    else if (e.target.id === "box") cdrag = { move: true, dx: x - d.x, dy: y - d.y };
+    else { cdrag = { ax: x, ay: y }; cropping.draft = { x, y, w: 0, h: 0 }; }
+    work.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+  function cropMove(e) {
+    const [x, y] = srcAt(e), d = cropping.draft, m = cview.m;
+    if (cdrag.move) Object.assign(d, { x: clamp(x - cdrag.dx, 0, m.w - d.w), y: clamp(y - cdrag.dy, 0, m.h - d.h) });
+    else cropping.draft = { x: Math.min(x, cdrag.ax), y: Math.min(y, cdrag.ay), w: Math.abs(x - cdrag.ax), h: Math.abs(y - cdrag.ay) };
+    drawFrame();
+  }
+  function endCrop(apply) {
+    const c = sel(), d = cropping?.draft;
+    cropping = null;
+    $("#box").hidden = true;
+    if (apply && d && d.w >= 4 && d.h >= 4) {
+      const m = mediaOf(c), x = Math.round(d.x), y = Math.round(d.y);
+      c.crop = { x, y, w: Math.min(m.w - x, Math.max(2, Math.round(d.w / 2) * 2)), h: Math.min(m.h - y, Math.max(2, Math.round(d.h / 2) * 2)) };
+      fitClip(c);
+      return commit("Crop");
+    }
+    render();
+  }
+  $("#crop").onclick = () => { const c = sel(), m = mediaOf(c); if (!m?.url) return; cropping = { draft: c.crop ? { ...c.crop } : { x: 0, y: 0, w: m.w, h: m.h } }; render(); };
+  $("#crop-apply").onclick = () => endCrop(true);
+  $("#crop-cancel").onclick = () => endCrop(false);
+  $("#crop-reset").onclick = () => { const c = sel(); c.crop = null; fitClip(c); commit("Uncrop"); };
+
+  // ---- Clip and project panels ----
+  const onClip = (fn, label) => { const c = sel(); if (c) { fn(c); commit(label); } };
+  const withMates = (fn) => (c) => [c, ...mates(c)].forEach(fn);  // timing settings stay the same on a linked picture and sound
+  $("#cx").onchange = () => onClip((c) => (c.x = Math.round(val("cx"))), "Move");
+  $("#cy").onchange = () => onClip((c) => (c.y = Math.round(val("cy"))), "Move");
+  $("#cw").onchange = () => onClip((c) => { const w = Math.max(2, Math.round(val("cw") / 2) * 2); c.h = Math.max(2, Math.round((c.h * w) / c.w / 2) * 2); c.w = w; }, "Resize");
+  $("#ch").onchange = () => onClip((c) => { const h = Math.max(2, Math.round(val("ch") / 2) * 2); c.w = Math.max(2, Math.round((c.w * h) / c.h / 2) * 2); c.h = h; }, "Resize");
+  const turnTo = (deg) => onClip((c) => (c.rot = Math.round((((deg % 360) + 360) % 360) * 10) / 10), "Rotate");
+  $("#angle").onchange = () => turnTo(val("angle") || 0);
+  $("#rot-l").onclick = () => turnTo(sel().rot - 90);
+  $("#rot-r").onclick = () => turnTo(sel().rot + 90);
+  $("#fit").onclick = () => onClip((c) => fitClip(c, false), "Fit");
+  $("#fill").onclick = () => onClip((c) => fitClip(c, true), "Fill");
+  $("#flip-h").onclick = () => onClip((c) => (c.flipH = !c.flipH), "Mirror");
+  $("#flip-v").onclick = () => onClip((c) => (c.flipV = !c.flipV), "Flip");
+  $("#mute").onclick = () => { onClip((c) => (c.mute = !c.mute), "Mute"); sync(false); };
+  for (const [id, key, label, k] of [["opacity", "opacity", "Opacity", 100], ["volume", "volume", "Volume", 100]]) {  // live while dragging, one step at the end
+    $("#" + id).oninput = () => { const c = sel(); if (!c) return; c[key] = val(id) / k; $("#" + id).nextElementSibling.textContent = val(id) + "%"; sync(false); drawFrame(); };
+    $("#" + id).onchange = () => onClip((c) => (c[key] = val(id) / k), label);
+  }
+  const fadeTo = (key, id) => onClip(withMates((c) => (c[key] = clamp(val(id) || 0, 0, len(c)))), "Fade");
+  $("#fade-in").onchange = () => fadeTo("fadeIn", "fade-in");
+  $("#fade-out").onchange = () => fadeTo("fadeOut", "fade-out");
+  $("#speed").onchange = () => onClip(withMates((c) => (c.speed = clamp(val("speed") || 1, 0.25, 4))), "Speed");
+  // text: the box keeps its scale and center when the words or the font change
+  $("#tx-font").append(...FONTS.map((f) => new Option(f, f)));
+  function onText(fn, label = "Edit text", final = true) {
+    const c = sel();
+    if (!c?.t) return;
+    const old = textSize(c.t), scale = c.w / old.w, cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+    c.t = { ...c.t };
+    fn(c.t);
+    const nat = textSize(c.t);
+    Object.assign(c, { w: Math.max(2, Math.round(nat.w * scale)), h: Math.max(2, Math.round(nat.h * scale)) });
+    Object.assign(c, { x: Math.round(cx - c.w / 2), y: Math.round(cy - c.h / 2) });
+    final ? commit(label) : (drawFrame(), renderTimeline());
+  }
+  $("#tx-value").oninput = () => onText((x) => (x.value = $("#tx-value").value || " "), "", false);
+  $("#tx-value").onchange = () => onText((x) => (x.value = $("#tx-value").value || " "));
+  $("#tx-font").onchange = () => onText((x) => (x.font = $("#tx-font").value));
+  $("#tx-size").onchange = () => onText((x) => (x.size = clamp(val("tx-size") || 72, 4, 1000)));
+  $("#tx-color").onchange = () => onText((x) => (x.color = $("#tx-color").value));
+  $("#tx-bold").onclick = () => onText((x) => (x.bold = !x.bold));
+  $("#tx-italic").onclick = () => onText((x) => (x.italic = !x.italic));
+  $("#tx-align").onclick = (e) => { const b = e.target.closest("button"); if (b) onText((x) => (x.align = b.dataset.a)); };
+  $("#tx-bg-on").onchange = $("#tx-bg").onchange = () => onText((x) => (x.bg = $("#tx-bg-on").checked ? $("#tx-bg").value : null));
+  $("#canvas-shape").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    proj.canvas = b.dataset.c || null;
+    proj.size = null;
+    for (const c of allClips()) if (trackOf(c).kind === "video") fitClip(c);  // a new shape: everything fitted again
+    commit("Canvas");
+  };
+  $("#fps").onchange = () => { proj.fps = clamp(val("fps") || 30, 1, 120); proj.fpsSet = true; commit("Frame rate"); };
+  const outTo = (w, h) => { proj.size = { w: Math.max(16, Math.round(w / 2) * 2), h: Math.max(16, Math.round(h / 2) * 2) }; commit("Output size"); };
+  $("#ow").onchange = () => { const [cw, ch] = canvasDims(), w = val("ow") || cw; outTo(w, (w * ch) / cw); };
+  $("#oh").onchange = () => { const [cw, ch] = canvasDims(), h = val("oh") || ch; outTo((h * cw) / ch, h); };
+  $("#o-reset").onclick = () => { proj.size = null; commit("Output size"); };
+
+  function panels() {
+    const c = sel(), k = c && kindOf(c), m = c && mediaOf(c), tr = c && trackOf(c), onSound = tr?.kind === "audio";
+    const typed = (id, v) => { const el = $("#" + id); if (document.activeElement !== el) el.value = v; };
+    $("#clip-info").textContent = c ? `${nameOf(c)} · ${stamp(c.start)} → ${stamp(c.start + len(c))} · ${stamp(len(c))} long`
+      + (c.speed !== 1 ? ` · ${c.speed}×` : "") + (c.crop ? ` · cropped ${c.crop.w} × ${c.crop.h}` : "") + (m?.missing ? " · file not added yet" : "")
+      : "Click a clip on the timeline to edit it, or add text with ＋ Text.";
+    $("#clip-text").hidden = k !== "text";
+    $("#clip-pic").hidden = !c || onSound;
+    $("#crop-row").hidden = k === "text";
+    $("#clip-time").hidden = !c;
+    $("#speed-row").hidden = !c || k === "image" || k === "text";
+    $("#clip-sound").hidden = !c || !(onSound || (k === "video" && !c.detached));
+    $("#clip-link").textContent = !c ? "" : c.link ? (onSound ? "Linked to its picture: they move, trim and split together." : "Its sound is on an audio track, linked: they move, trim and split together.")
+                                    : c.detached ? "Its sound is a separate clip on an audio track." : "";
+    $("#unlink").disabled = !c?.link;
+    $("#crossfade").disabled = !c;
+    if (c) {
+      typed("cx", c.x); typed("cy", c.y); typed("cw", c.w); typed("ch", c.h); typed("angle", c.rot);
+      typed("fade-in", c.fadeIn); typed("fade-out", c.fadeOut); typed("speed", c.speed);
+      for (const [id, v] of [["opacity", c.opacity], ["volume", c.volume]]) { typed(id, Math.round(v * 100)); $("#" + id).nextElementSibling.textContent = Math.round(v * 100) + "%"; }
+      $("#mute").ariaPressed = String(c.mute);
+      $("#mute").textContent = c.mute ? "Clip muted" : "Mute clip";
+      $("#flip-h").ariaPressed = String(c.flipH); $("#flip-v").ariaPressed = String(c.flipV);
+      if (c.t) {
+        typed("tx-value", c.t.value); $("#tx-font").value = c.t.font; typed("tx-size", c.t.size); typed("tx-color", c.t.color);
+        $("#tx-bold").ariaPressed = String(c.t.bold); $("#tx-italic").ariaPressed = String(c.t.italic);
+        document.querySelectorAll("#tx-align button").forEach((b) => (b.ariaPressed = String(b.dataset.a === c.t.align)));
+        $("#tx-bg-on").checked = !!c.t.bg; if (c.t.bg) typed("tx-bg", c.t.bg);
+      }
+    }
+    for (const id of ["crop", "crop-reset", "fit", "fill", "rot-l", "rot-r", "flip-h", "flip-v"]) $("#" + id).hidden = !!cropping && id !== "crop";
+    $("#crop").hidden = !!cropping;
+    $("#crop-apply").hidden = $("#crop-cancel").hidden = !cropping;
+    $("#crop-reset").disabled = !c?.crop;
+    const [cw, ch] = canvasDims(), out = proj.size || { w: cw, h: ch };
+    document.querySelectorAll("#canvas-shape button").forEach((b) => (b.ariaPressed = String((b.dataset.c || null) === proj.canvas)));
+    typed("fps", proj.fps); typed("ow", out.w); typed("oh", out.h);
+    $("#proj-info").textContent = `Canvas ${cw} × ${ch} · output ${out.w} × ${out.h} · ${stamp(end())} long`;
+    $("#undo").disabled = pos <= 0;
+    $("#redo").disabled = pos >= history.length - 1;
+    $("#readout").textContent = allClips().length ? `${proj.tracks.length} tracks · ${allClips().length} clips · ${stamp(end())}` : "";
+  }
+
+  function renderMedia() {
+    $("#media").replaceChildren(...media.map((m) => {
+      const li = Object.assign(document.createElement("li"), { draggable: !m.missing, className: m.missing ? "missing" : "" });
+      li.dataset.m = m.id;
+      const state = m.missing ? "✗ not added yet: add this file" : m.err ? `✗ ${m.err}` : m.up != null ? `uploading ${Math.round(m.up * 100)}%` : "✓";
+      li.append(Object.assign(document.createElement("span"), { className: "name", textContent: m.name }),
+                Object.assign(document.createElement("span"), { className: "meta", textContent: `${m.kind}${isFinite(m.duration) ? " · " + stamp(m.duration) : ""} · ${state}` }),
+                Object.assign(document.createElement("button"), { type: "button", className: "add", textContent: "Add", disabled: !!m.missing }));
+      return li;
+    }));
+  }
+  $("#media").onclick = (e) => {
+    const b = e.target.closest(".add");
+    if (!b) return;
+    const m = media.find((x) => x.id === +b.parentElement.dataset.m), c = sel(), tr = c && trackOf(c);
+    queue(m, tr?.kind === trackKind(m) ? tr : null, t);
+  };
+  $("#media").addEventListener("dragstart", (e) => { e.dataTransfer.setData("application/x-media", e.target.closest("li").dataset.m); e.dataTransfer.effectAllowed = "copy"; });
+
+  // ---- Timeline ----
+  const grid = $("#grid"), scroller = $("#tl-scroll");
+  const xToTime = (x) => Math.max(0, (x - grid.getBoundingClientRect().left - HEAD) / pps);
+  function names() {  // V1 is the bottom picture track, A1 the top sound track (like Premiere)
+    const v = proj.tracks.filter((x) => x.kind === "video"), a = proj.tracks.filter((x) => x.kind === "audio");
+    return new Map([...v.map((tr, i) => [tr.id, "V" + (v.length - i)]), ...a.map((tr, i) => [tr.id, "A" + (i + 1)])]);
+  }
+  function clipLook(el, c, tr) {  // frames / waveform under the name, fades as dark ramps on top
+    const m = mediaOf(c), sp = c.speed || 1, fi = c.fadeIn * pps, fo = c.fadeOut * pps;
+    if (tr.kind === "audio" && m?.wave)  // a waveform can stretch: it's still the right sound in the right place
+      Object.assign(el.style, { backgroundImage: `url(${m.wave})`, backgroundSize: `${(m.duration / sp) * pps}px 100%`, backgroundPosition: `${(-c.in / sp) * pps}px 0`, backgroundRepeat: "no-repeat" });
+    else if (m?.kind === "image" && m.url) Object.assign(el.style, { backgroundImage: `url(${m.url})`, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x" });
+    else if (tr.kind === "video" && m?.frames?.length) {
+      const cv = Object.assign(document.createElement("canvas"), { className: "th" });
+      el.prepend(cv);
+      tiles.push([cv, c, m]);
+    }
+    if (fi || fo) el.append(Object.assign(document.createElement("b"), { className: "fx", style: `background:linear-gradient(to right, rgba(0,0,0,.75), transparent ${fi}px, transparent calc(100% - ${fo}px), rgba(0,0,0,.75))` }));
+  }
+  let tiles = [];  // [canvas, clip, file] to draw frames into, after the rows are laid out
+  function drawTiles() {  // only the part of each clip that's on screen; tiles keep the video's shape, each showing the moment under it
+    const v0 = scroller.scrollLeft, v1 = v0 + scroller.clientWidth - HEAD, dpr = devicePixelRatio || 1;
+    for (const [cv, c, m] of tiles) {
+      const x0 = c.start * pps, x1 = x0 + len(c) * pps, a = Math.max(x0, v0), b = Math.min(x1, v1), H = cv.parentElement.clientHeight;
+      if (b <= a || !H) { cv.width = 0; continue; }
+      const W = Math.max(8, (H * m.w) / m.h), sp = c.speed || 1;
+      Object.assign(cv.style, { left: a - x0 - 2 + "px", width: b - a + "px" });
+      cv.width = Math.ceil((b - a) * dpr);
+      cv.height = Math.ceil(H * dpr);
+      const ctx = cv.getContext("2d");
+      for (let k = Math.floor((a - x0) / W); x0 + k * W < b; k++) {  // the tile grid starts at the clip's start, so it doesn't slide while scrolling
+        const at = c.in + ((k + 0.5) * W * sp) / pps, f = m.frames[clamp(Math.floor(at / m.fstep), 0, m.frames.length - 1)];
+        ctx.drawImage(f, (x0 + k * W - a) * dpr, 0, W * dpr, H * dpr);
+      }
+    }
+  }
+  let tlQueued = false;
+  function soonTimeline() { if (!tlQueued) { tlQueued = true; requestAnimationFrame(() => { tlQueued = false; renderTimeline(); }); } }
+  function renderTimeline() {
+    const span = Math.max(end() + 15, (scroller.scrollLeft + scroller.clientWidth - HEAD) / pps + 5), nm = names(), picked = sel(), mateIds = picked ? mates(picked) : [];
+    grid.style.width = HEAD + span * pps + "px";
+    tiles = [];
+    $("#rows").replaceChildren(...proj.tracks.map((tr) => {
+      const row = Object.assign(document.createElement("div"), { className: `tl-row ${tr.kind}` }), head = document.createElement("div"), lane = document.createElement("div");
+      row.dataset.t = tr.id;
+      head.className = "thead";
+      head.innerHTML = `<b>${nm.get(tr.id)}</b>`;
+      const btn = (act, text, on, title) => Object.assign(document.createElement("button"), { type: "button", textContent: text, title, ariaPressed: String(on), className: "tb", onclick: act });
+      if (tr.kind === "audio") head.append(btn(() => { tr.muted = !tr.muted; commit("Mute track"); sync(false); }, "Mute", tr.muted, "Mute this track"));
+      else head.append(btn(() => { tr.hidden = !tr.hidden; commit("Hide track"); seek(t); }, "Hide", tr.hidden, "Hide this track's picture"));
+      head.append(btn(() => { if (tr.clips.length && !confirm("Delete this track and its clips?")) return; proj.tracks.splice(proj.tracks.indexOf(tr), 1); commit("Delete track"); seek(t); }, "✕", false, "Delete the track"));
+      lane.className = "lane";
+      for (const c of tr.clips) {
+        const k = kindOf(c), el = document.createElement("div");
+        el.className = `clip ${tr.kind === "audio" ? "audio" : k || "video"}${c.id === selected ? " on" : ""}${mateIds.includes(c) ? " mate" : ""}${c.link ? " linked" : ""}`
+          + `${(tr.kind === "audio" || !c.detached) && (c.mute || tr.muted) ? " muted" : ""}${mediaOf(c)?.missing ? " missing" : ""}`;
+        el.title = nameOf(c);
+        el.dataset.c = c.id;
+        Object.assign(el.style, { left: c.start * pps + "px", width: Math.max(4, len(c) * pps) + "px" });
+        el.innerHTML = `<i class="edge l"></i><span></span><i class="edge r"></i>`;
+        el.querySelector("span").textContent = nameOf(c) + (c.speed !== 1 ? `  ${c.speed}×` : "");
+        clipLook(el, c, tr);
+        lane.append(el);
+      }
+      row.append(head, lane);
+      return row;
+    }));
+    drawTiles();
+    const step = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800].find((s) => s * pps >= 70) || 3600, ruler = $("#ruler");
+    ruler.style.setProperty("--minor", (step * pps) / 5 + "px");
+    ruler.replaceChildren(...Array.from({ length: Math.ceil(span / step) + 1 }, (_, i) => {
+      const s = Object.assign(document.createElement("span"), { textContent: stamp(i * step).replace(/\.0$/, "") });
+      s.style.left = i * step * pps + "px";
+      return s;
+    }));
+    playhead();
+  }
+  function playhead(follow) {
+    $("#ph").style.left = HEAD + t * pps + "px";
+    $("#ph").style.visibility = t * pps < scroller.scrollLeft ? "hidden" : "";  // scrolled behind the track names
+    $("#time").textContent = `${stamp(t)} / ${stamp(end())}`;
+    if (follow) {  // keep it in view while playing
+      const x = HEAD + t * pps - scroller.scrollLeft;
+      if (x > scroller.clientWidth - 40 || x < HEAD) scroller.scrollLeft = HEAD + t * pps - HEAD - 40;
+    }
+  }
+  function edges(skip) {  // where a dragged edge can snap to: the start, the playhead, other clips' ends (not its linked ones)
+    const c = clipById(skip), out = new Set([skip, ...(c ? mates(c).map((x) => x.id) : [])]);
+    return [0, t, ...allClips().filter((x) => !out.has(x.id)).flatMap((x) => [x.start, x.start + len(x)])];
+  }
+  function snap(v, skip) {
+    if (!$("#snap").checked) return v;
+    let best = v, d = 8 / pps;
+    for (const s of edges(skip)) if (Math.abs(s - v) < d) { d = Math.abs(s - v); best = s; }
+    return best;
+  }
+  grid.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest(".thead")) return;
+    const el = e.target.closest(".clip");
+    if (el) {
+      const c = clipById(+el.dataset.c), side = e.target.closest(".edge");
+      selected = c.id;
+      tdrag = { mode: side ? (side.classList.contains("l") ? "left" : "right") : "move", x0: e.clientX, c0: { ...c }, moved: false,
+                m0: mates(c).map((x) => [x, { ...x }]) };
+      render();
+    } else {
+      if (e.target.closest(".lane")) { selected = null; render(); }
+      scrub = true;
+      seek(xToTime(e.clientX));
+    }
+    grid.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  grid.addEventListener("pointermove", (e) => {
+    if (scrub) return seek(xToTime(e.clientX));
+    if (!tdrag) return;
+    const d = tdrag, c = sel(), c0 = d.c0, sp = c.speed || 1, dt = (e.clientX - d.x0) / pps, still = maxOut(c) === Infinity;
+    d.moved = d.moved || Math.abs(e.clientX - d.x0) > 2;
+    if (!d.moved) return;
+    if (d.mode === "move") {
+      const s = Math.max(0, c0.start + dt), a = snap(s, c.id), b = snap(s + len(c0), c.id) - len(c0);
+      c.start = Math.max(0, a !== s ? a : b);
+      const row = document.elementFromPoint(e.clientX, e.clientY)?.closest(".tl-row:not(.ruler-row)");  // up or down a track
+      const to = row && proj.tracks.find((x) => x.id === +row.dataset.t), from = trackOf(c);
+      if (to && to !== from && to.kind === from.kind) { from.clips.splice(from.clips.indexOf(c), 1); to.clips.push(c); }
+    } else if (d.mode === "left") {  // still pictures and text just get longer; videos and sounds start later or earlier in the file
+      const lo = still ? 0 : Math.max(0, c0.start - c0.in / sp), s = Math.max(lo, snap(clamp(c0.start + dt, lo, c0.start + len(c0) - 0.1), c.id));
+      if (still) Object.assign(c, { start: s, out: c0.out - (s - c0.start) });
+      else Object.assign(c, { start: s, in: c0.in + (s - c0.start) * sp });
+    } else {
+      const e1 = snap(c0.start + len(c0) + dt, c.id);
+      c.out = clamp(c.in + (e1 - c.start) * sp, c.in + 0.1 * sp, maxOut(c));
+    }
+    for (const [x, x0] of d.m0) Object.assign(x, d.mode === "move" ? { start: x0.start + (c.start - c0.start) } : { start: c.start, in: c.in, out: c.out });
+    renderTimeline();
+    seek(t);
+    panels();
+  });
+  grid.addEventListener("pointerup", () => {
+    if (tdrag?.moved) commit({ move: "Move clip", left: "Trim", right: "Trim" }[tdrag.mode]);
+    tdrag = null;
+    scrub = false;
+  });
+  grid.addEventListener("dragover", (e) => { if (e.dataTransfer.types.includes("application/x-media")) e.preventDefault(); });
+  grid.addEventListener("drop", (e) => {  // a file from the media list, onto a track
+    const id = e.dataTransfer.getData("application/x-media");
+    if (!id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const m = media.find((x) => x.id === +id), row = e.target.closest(".tl-row:not(.ruler-row)"), tr = row && proj.tracks.find((x) => x.id === +row.dataset.t);
+    queue(m, tr?.kind === trackKind(m) ? tr : null, snap(xToTime(e.clientX)));
+  });
+  scroller.addEventListener("scroll", () => { playhead(); scroller.scrollLeft + scroller.clientWidth > grid.offsetWidth - 50 ? soonTimeline() : drawTiles(); });
+  scroller.addEventListener("wheel", (e) => {  // Ctrl+wheel zooms around the pointer
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const at = xToTime(e.clientX), z = $("#zoom");
+    z.value = clamp(+z.value + (e.deltaY < 0 ? 4 : -4), 0, 100);
+    zoomed(at, e.clientX);
+  }, { passive: false });
+  function zoomed(at = t, x = null) {
+    const z = $("#zoom"), px = x ?? grid.getBoundingClientRect().left + HEAD + at * pps;
+    pps = 2 * 1.07 ** +z.value;
+    z.nextElementSibling.textContent = pps >= 10 ? Math.round(pps) : pps.toFixed(1);
+    renderTimeline();
+    scroller.scrollLeft = HEAD + at * pps - (px - scroller.getBoundingClientRect().left);
+  }
+  $("#zoom").oninput = () => zoomed();
+  function splitHere() {  // the selected clip (and its linked one), or every clip under the playhead
+    const c = sel(), picked = c && activeAt(c, t) ? [c] : allClips().filter((x) => activeAt(x, t));
+    const targets = [...new Set(picked.flatMap((x) => [x, ...mates(x).filter((y) => activeAt(y, t))]))], links = new Map();
+    for (const a of targets) {
+      if (t - a.start < 0.05 || a.start + len(a) - t < 0.05) continue;
+      const cut = a.in + (t - a.start) * (a.speed || 1), b = { ...structuredClone(a), id: nextId++, start: t, in: cut, fadeIn: 0 };
+      if (a.link) { if (!links.has(a.link)) links.set(a.link, nextId++); b.link = links.get(a.link); }  // the second halves stay linked
+      a.out = cut;
+      a.fadeOut = 0;
+      const tr = trackOf(a);
+      tr.clips.splice(tr.clips.indexOf(a) + 1, 0, b);
+      selected = b.id;
+    }
+    if (targets.length) commit("Split");
+  }
+  function deleteClip() {
+    const c = sel();
+    if (!c) return;
+    for (const x of [c, ...mates(c)]) { const tr = trackOf(x); tr.clips.splice(tr.clips.indexOf(x), 1); }  // with its linked sound / picture
+    selected = null;
+    commit("Delete clip");
+    seek(t);
+  }
+  function crossfade(d = 1) {  // the selected clip slides back over the one before it, fading in (its sound too; the old sound fades out)
+    const c = sel(), tr = c && trackOf(c);
+    if (!c) return;
+    const prev = tr.clips.filter((x) => x !== c && x.start < c.start).sort((a, b) => b.start - a.start)[0];
+    if (!prev) return note("✗ Crossfade needs a clip before this one on the same track", "err");
+    d = Math.min(d, len(prev) / 2, len(c) / 2);
+    const shift = prev.start + len(prev) - d - c.start;
+    for (const x of [c, ...mates(c)]) { x.start = Math.max(0, x.start + shift); x.fadeIn = d; }
+    for (const x of mates(prev)) x.fadeOut = d;
+    if (tr.kind === "audio") prev.fadeOut = d;
+    commit("Crossfade");
+    seek(t);
+  }
+  function addText() {  // on top: the first picture track, or a new one when that's busy at the playhead
+    let tr = proj.tracks.find((x) => x.kind === "video");
+    if (!tr || tr.clips.some((x) => !x.t && x.start < t + 3 && x.start + len(x) > t)) proj.tracks.unshift((tr = newTrack("video")));
+    const [cw, ch] = canvasDims(), tx = { value: "Your text", font: "Arial", size: Math.round(ch / 9), color: "#ffffff", bold: true, italic: false, align: "center", bg: null };
+    const nat = textSize(tx), c = newClip({ t: tx, start: t, out: 3, w: nat.w, h: nat.h, x: Math.round((cw - nat.w) / 2), y: Math.round((ch - nat.h) / 2) });
+    tr.clips.push(c);
+    selected = c.id;
+    commit("Add text");
+    seek(t);
+    $("#tx-value").focus();
+    $("#tx-value").select();
+  }
+  $("#split").onclick = splitHere;
+  $("#del").onclick = deleteClip;
+  $("#crossfade").onclick = () => crossfade();
+  $("#add-text").onclick = addText;
+  $("#unlink").onclick = () => onClip((c) => { for (const x of [c, ...mates(c)]) delete x.link; }, "Unlink");
+  $("#play").onclick = play;
+  $("#add-v").onclick = () => { proj.tracks.unshift(newTrack("video")); commit("Add track"); };
+  $("#add-a").onclick = () => { proj.tracks.push(newTrack("audio")); commit("Add track"); };
+
+  function render() {
+    document.body.classList.toggle("nomedia", !media.length && !allClips().length);
+    renderTimeline();
+    renderMedia();
+    panels();
+    drawFrame();
+    exportUI();
+  }
+
+  // ---- Projects (.mtvid): the timeline and the list of files; reopening asks for the files again (matched by name) ----
+  async function saveFile(blob, name, what) {
+    note("saving…", "live");
+    try {
+      const r = await (await fetch("/image/save", { method: "POST", body: blob,
+        headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(name) } })).json();
+      if (!r.ok) throw new Error(r.error);
+      note(`✓ ${r.file} · ${what}`, "ok");
+      $("#status").append(" ", openLink(r.file));
+    } catch (err) { note(`✗ couldn't save: ${err.message || "is the server running?"}`, "err"); }
+  }
+  const stemName = () => projName || media[0]?.name.replace(/\.[^.]+$/, "") || "timeline";
+  $("#save-project").onclick = () => {
+    if (!allClips().length) return note("✗ Nothing on the timeline to save", "err");
+    const files = media.map(({ id, name, size, kind, w, h, duration, audio, fps }) => ({ id, name, size, kind, w, h, duration: isFinite(duration) ? duration : null, audio, fps }));
+    const json = JSON.stringify({ format: "multitool-video", version: 1, name: stemName(), nextId, proj, media: files });
+    saveFile(new Blob([json]), `${stemName()}.mtvid`, `project · ${allClips().length} clips`);
+  };
+  async function openProject(f) {
+    let p;
+    try { p = JSON.parse(await f.text()); if (p.format !== "multitool-video") throw new Error(); }
+    catch { return note(`✗ ${f.name} isn't a Multitool video project`, "err"); }
+    if (allClips().length && !confirm("Open this project? The timeline you have now goes away.")) return;
+    stop();
+    for (const el of els.values()) if (el.tagName !== "IMG") { el.pause(); el.removeAttribute("src"); el.load(); }
+    els.clear();
+    media = p.media.map((m) => ({ ...m, duration: m.duration ?? Infinity, url: null, job: null, missing: true, up: null }));
+    proj = p.proj; nextId = p.nextId; projName = p.name || ""; history = []; labels = []; pos = -1; selected = null;
+    commit("Open project");
+    seek(0);
+    note(`Opened ${f.name}. Add its files (Add media… or drop them) and they go back in by name: ${media.map((m) => m.name).join(", ")}`, "live");
+  }
+  $("#open-project").onchange = (e) => { if (e.target.files[0]) openProject(e.target.files[0]); e.target.value = ""; };
+
+  // ---- Export: the layout goes to the server; progress, pause and cancel like the other tools ----
+  const textUploads = new Map();  // a text clip's picture, uploaded once per look and size
+  async function textUpload(c) {
+    const img = renderText(c.t, Math.max(0.02, c.w / textSize(c.t).w)), key = JSON.stringify(c.t) + "@" + img.width + "x" + img.height;
+    if (!textUploads.has(key)) {
+      const blob = await new Promise((ok) => img.toBlob(ok, "image/png"));
+      const r = await (await fetch("/convert/upload", { method: "POST", body: blob,
+        headers: { "Content-Type": "application/octet-stream", "X-Filename": "text.png", "X-Tool": "editor" } })).json();
+      if (!r.ok) throw new Error("text upload failed");
+      textUploads.set(key, r.id);
+    }
+    return textUploads.get(key);
+  }
+  async function layout() {
+    const [w, h] = canvasDims(), clips = [];
+    const common = (c) => ({ start: c.start, in: c.in, out: c.out, speed: c.speed, volume: c.volume, opacity: c.opacity, fadeIn: c.fadeIn, fadeOut: c.fadeOut });
+    const pic = (c) => ({ x: c.x, y: c.y, w: c.w, h: c.h, rot: c.rot, flipH: c.flipH, flipV: c.flipV, crop: c.crop });
+    for (const tr of proj.tracks.filter((x) => x.kind === "video").reverse())  // bottom layer first
+      for (const c of [...tr.clips].sort((a, b) => a.start - b.start))
+        clips.push({ src: c.t ? await textUpload(c) : mediaOf(c).job, ...common(c), ...(c.t ? { in: 0, out: len(c), crop: null } : {}),
+                     mute: silent(c, tr), show: !tr.hidden, ...pic(c), ...(c.t ? { crop: null } : {}) });
+    for (const tr of proj.tracks.filter((x) => x.kind === "audio"))
+      for (const c of tr.clips) clips.push({ src: mediaOf(c).job, ...common(c), mute: c.mute || tr.muted, show: false });
+    return { w, h, fps: proj.fps, size: proj.size, clips };
+  }
+  $("#export").onclick = async () => {
+    if (!allClips().length) return note("✗ Add something to the timeline first", "err");
+    const files = allClips().filter((c) => !c.t).map(mediaOf);
+    if (files.some((m) => m.missing)) return note("✗ Some files of this project aren't added yet: add them (they go back in by name)", "err");
+    if (files.some((m) => m.err)) return note("✗ A file didn't upload: remove its clips or add it again", "err");
+    if (files.some((m) => !m.job)) return note("still uploading the files… try again in a moment", "live");
+    stop();
+    note("starting the export…", "live");
+    let r;
+    try { r = await (await post("/convert/timeline", { project: await layout(), name: stemName() })).json(); } catch { r = { ok: false }; }
+    if (!r.ok) return note("✗ couldn't start the export", "err");
+    exportId = r.id;
+    job = { status: "queued" };
+    exportUI();
+  };
+  $("#pause").onclick = () => post("/convert/" + (job?.status === "paused" ? "resume" : "pause"), { id: exportId }).then(poll);
+  $("#cancel").onclick = () => post("/convert/cancel", { id: exportId }).then(() => { exportId = null; job = null; note("export canceled"); exportUI(); });
+  function openLink(path) {  // Explorer opens on the result: a web page can't open local folders itself
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Open folder" });
+    b.onclick = async () => { const r = await post("/open", { file: path }).catch(() => null); if (!r?.ok) b.textContent = "file moved or deleted"; };
+    return b;
+  }
+  function exportUI() {
+    const busy = job && ["queued", "busy", "paused"].includes(job.status), p = exportId && progress[exportId];
+    $("#export").disabled = !!busy || !allClips().length;
+    $("#save-project").disabled = !allClips().length;
+    $("#pause").hidden = !busy || job.status === "queued";
+    $("#pause").textContent = job?.status === "paused" ? "Continue" : "Pause";
+    $("#cancel").hidden = !busy;
+    const bar = $("#bar"), f = p?.total ? clamp(p.done / p.total, 0, 1) : null;
+    bar.hidden = !busy;
+    if (f != null) bar.value = f; else bar.removeAttribute("value");
+    if (!job) return;
+    if (busy) note(job.status === "queued" ? "export queued" : job.status === "paused" ? "paused" : `exporting · ${f != null ? Math.floor(f * 100) + "%" : "starting…"}`
+                   + (p?.speed && p.speed !== "N/A" ? ` · ${p.speed.trim()} speed` : ""), "live");
+    else if (job.status === "done") { note(`✓ ${job.file} · ${size(job.out_size)}`, "ok"); $("#status").append(" ", openLink(job.file)); exportId = null; job = null; }
+    else if (job.status === "error") { note("✗ " + job.msg, "err"); exportId = null; job = null; }
+  }
+  async function poll() {
+    try {
+      const s = await (await fetch("/convert/state?tool=editor")).json(), byId = new Map(s.jobs.map((j) => [j.id, j]));
+      progress = s.progress;
+      $("#out").textContent = $("#out").title = s.out;
+      for (const m of media) if (m.job && m.audio == null && byId.get(m.job)) m.audio = byId.get(m.job).audio;  // the server knows about the sound
+      if (adds.length) drain();
+      for (const m of media) {  // and the frame rate
+        const j = m.job && byId.get(m.job);
+        if (j && !proj.fpsSet && j.fps && m.kind === "video" && m === media.find((x) => x.kind === "video")) proj.fps = Math.round(j.fps * 100) / 100;
+      }
+      if (exportId) { job = byId.get(exportId) || job; exportUI(); }
+      panels();
+    } catch {}
+  }
+  $("#pick").onclick = async () => {
+    const b = $("#pick");
+    b.disabled = true;
+    b.textContent = "Pick it in the window…";
+    try { const r = await (await post("/folder", { which: "convert_out" })).json(); if (r.ok) $("#out").textContent = $("#out").title = r.out; } catch {}
+    b.disabled = false;
+    b.textContent = "Change";
+  };
+
+  // ---- Keys, panel sizes, files ----
+  $("#undo").onclick = () => goTo(pos - 1);
+  $("#redo").onclick = () => goTo(pos + 1);
+  addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    if (e.target.matches("input:not([type=range]):not([type=checkbox]), textarea, select")) return;
+    if (mod && k === "o") { e.preventDefault(); return $("#file").click(); }
+    if (document.body.classList.contains("nomedia")) return;
+    if (mod) {
+      const act = { z: () => goTo(e.shiftKey ? pos + 1 : pos - 1), y: () => goTo(pos + 1), b: splitHere, k: splitHere,
+                    s: () => $(e.shiftKey ? "#save-project" : "#export").click() }[k];
+      if (act) { e.preventDefault(); act(); }
+      return;
+    }
+    const step = e.shiftKey ? 1 : 1 / proj.fps;
+    const act = { " ": play, s: splitHere, delete: deleteClip, backspace: deleteClip, home: () => seek(0), end: () => seek(end()),
+                  arrowleft: () => seek(t - step), arrowright: () => seek(t + step), escape: () => (cropping ? endCrop(false) : ((selected = null), render())),
+                  enter: () => cropping && endCrop(true) }[k];
+    if (act) { e.preventDefault(); act(); }
+  });
+  function resizer(handle, prop, key, get, min, max) {  // drag (or arrow keys) to resize a panel; remembered in this browser
+    const apply = (v) => { v = Math.round(clamp(v, min, max())); document.body.style.setProperty(prop, v + "px"); try { localStorage.setItem(key, v); } catch {} };
+    try { if (+localStorage.getItem(key)) apply(+localStorage.getItem(key)); } catch {}
+    handle.addEventListener("pointerdown", (e) => { handle.setPointerCapture(e.pointerId); handle.classList.add("on"); e.preventDefault(); });
+    handle.addEventListener("pointermove", (e) => { if (handle.hasPointerCapture(e.pointerId)) apply(get(e)); });
+    handle.addEventListener("pointerup", () => handle.classList.remove("on"));
+    handle.addEventListener("keydown", (e) => { const d = { ArrowLeft: 20, ArrowRight: -20, ArrowUp: 20, ArrowDown: -20 }[e.key]; if (d) { e.preventDefault(); e.stopPropagation(); apply(get(null) + d); } });
+  }
+  resizer($("#splitter"), "--side", "mt-vside", (e) => (e ? innerWidth - e.clientX - 3 : $(".side").offsetWidth), 240, () => innerWidth - 420);
+  resizer($("#hsplit"), "--tl", "mt-tl", (e) => (e ? $(".status-bar").getBoundingClientRect().top - e.clientY - 3 : $(".tl").offsetHeight), 140, () => innerHeight - 300);
+  new ResizeObserver(() => { drawFrame(); renderTimeline(); }).observe(work);
+  addEventListener("beforeunload", (e) => { if (allClips().length) e.preventDefault(); });  // unsaved work: the browser asks first
+  const hasFiles = (e) => e.dataTransfer?.types.includes("Files");
+  addEventListener("dragover", (e) => { if (hasFiles(e)) { e.preventDefault(); work.classList.add("over"); } });
+  addEventListener("dragleave", (e) => { if (!e.relatedTarget) work.classList.remove("over"); });
+  addEventListener("drop", (e) => { if (!hasFiles(e)) return; e.preventDefault(); work.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
+  for (const id of ["file", "file2"]) $("#" + id).onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
+  commit("Start");
+  zoomed(0);
+  poll();
+  setInterval(poll, 1000);
+</script>
+</body>
+</html>

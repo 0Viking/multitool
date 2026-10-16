@@ -21,7 +21,7 @@ import convert
 
 PORT = 8765
 PAGES = {"/": "index.html", "/downloader": "downloader.html", "/converter": "converter.html", "/style.css": "style.css",
-         "/editor": "studio.html", "/compressor": "studio.html",  # one page for both: it adapts to its address
+         "/editor": "timeline.html", "/compressor": "compressor.html",
          "/image": "image.html"}
 COOKIES = Path(__file__).parent / "cookies.txt"  # synced from Chrome by the extension; holds logins, keep private
 SETTINGS = Path(__file__).parent / "settings.json"
@@ -36,6 +36,9 @@ YOUTUBE_VIDEO = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/)
 ARIA2C = shutil.which("aria2c")
 ARIA2_READOUT = re.compile(r"\[#\w+ ([\d.]+)(\w+)/([\d.]+)(\w+)(?:\(\d+%\))? CN:\d+ DL:([\d.]+)(\w+)")  # yt-dlp doesn't relay it
 UNITS = {"B": 1, "KiB": 1024, "MiB": 1024 ** 2, "GiB": 1024 ** 3, "TiB": 1024 ** 4}
+DL_LIMIT = 5  # downloads running at once; the rest wait in line (a paused one frees its slot)
+UNAVAILABLE = {"[Private video]", "[Deleted video]"}  # how a playlist lists videos nobody can get
+MIX_LIMIT = 50  # a YouTube Mix (list=RD…) never ends: its first videos only
 
 settings = {"out": str(Path.home() / "Downloads"), "convert_out": str(Path.home() / "Downloads")}
 try:
@@ -48,6 +51,7 @@ downloads = {}  # download key -> its row in the Downloads list, so new catches 
 procs, stops, stems = {}, {}, {}  # download key -> running yt-dlp / "pause" or "cancel" asked / output path minus ext
 thumbs, previewing = {}, set()  # thumb id -> jpeg; list keys whose preview is being made
 saved = set()  # files the image editor wrote (Open folder may show them)
+batches, batch_procs = {}, {}  # links / playlists being added to the queue: id -> progress, and its yt-dlp listing
 picking = threading.Lock()  # one folder dialog at a time
 
 
@@ -174,19 +178,141 @@ def stream(media, key, name, page, audio=False):
 
 
 def run(b, key):
-    """A download in the background; its row in the list records how it ended."""
+    """A download in the background; its row in the list records how it ended. Then the next in line starts."""
     res = download(b, key)
     print("✓" if res["ok"] else "✗", res.get("file") or res.get("error") or res.get("stopped"))
     with lock:
         d = downloads.get(key)
-        if not d:  # canceled: the row is gone
-            return
-        if res.get("stopped") == "pause":
+        if d and res.get("stopped") == "pause":
             d["status"] = "paused"
-        elif res["ok"]:
+        elif d and res["ok"]:
             d.update(status="done", file=res["file"], msg=res["file"] + (f" — {res['note']}" if res.get("note") else ""))
-        else:
+        elif d:  # (no row: canceled)
             d.update(status="error", msg=res.get("error") or "stopped")
+    pump()
+
+
+def pump():
+    """Start waiting downloads, first in line first, while fewer than DL_LIMIT run."""
+    with lock:
+        free = DL_LIMIT - sum(d["status"] == "busy" for d in downloads.values())
+        nxt = sorted((d for d in downloads.values() if d["status"] == "queued"), key=lambda d: d["queued"])[:max(free, 0)]
+        for d in nxt:
+            d.update(status="busy", msg="")
+        starts = [({k: d[k] for k in ("url", "page", "media", "title", "audio")}, d["key"]) for d in nxt]
+    for job, key in starts:
+        threading.Thread(target=run, args=(job, key), daemon=True).start()
+
+
+def enqueue(url, audio, title="", extra=None, ts=None, place=None):
+    """A row for a pasted link, waiting in line (call with the lock held). False if it's in the list already."""
+    key = url + "#audio" if audio else url
+    if key in downloads:
+        return False
+    now = time.time()
+    downloads[key] = {"key": key, "ts": now if ts is None else ts, "queued": now if place is None else place, "url": url,
+                      "page": None, "media": None, "title": title[:200], "audio": audio, "status": "queued", "msg": "", **(extra or {})}
+    return True
+
+
+def is_playlist(url):
+    """YouTube-style playlist links: …/playlist?list=… or a video opened from one (…&list=…)."""
+    u = urlsplit(url)
+    return "list" in parse_qs(u.query) or u.path.rstrip("/").endswith("/playlist")
+
+
+def expand(bid, urls, audio):
+    """A batch of links going into the queue; playlists are opened up into their videos first (yt-dlp lists them
+    without downloading anything). Downloads start as videos turn up, 5 at a time."""
+    t0, n = time.time(), 0  # rows keep the batch's order, after anything added before: in the list and in line
+
+    def add(url, title="", extra=None):
+        nonlocal n
+        with lock:
+            b = batches[bid]
+            b["current"] = title or url  # what the popup says it's queueing
+            b["found" if enqueue(url, audio, title, extra, t0 + n * 1e-4, t0 + n * 1e-4) else "skipped"] += 1
+        n += 1
+        pump()
+
+    for i, url in enumerate(urls):
+        with lock:
+            b = batches[bid]
+            if b["status"] != "busy":
+                break
+            b.update(at=i, link=url, title="", total=None, listed=0, mix=False)
+        if not is_playlist(url):
+            add(url)
+            continue
+        cmd = [sys.executable, "-u", "-m", "yt_dlp", "--flat-playlist", "--yes-playlist", "--ignore-errors", "--encoding", "utf-8",
+               "--print", "%(playlist_count)s\t%(playlist_title)s\t%(id)s\t%(url)s\t%(duration)s\t%(title)s"]
+        if COOKIES.exists():  # private and members-only playlists
+            cmd += ["--cookies", str(COOKIES)]
+        if parse_qs(urlsplit(url).query).get("list", [""])[0].startswith("RD"):  # a Mix: YouTube's endless radio
+            cmd += ["--playlist-end", str(MIX_LIMIT)]
+            with lock:
+                b["mix"] = True
+        proc = subprocess.Popen(cmd + ["--", url], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+        with lock:
+            batch_procs[bid] = proc
+        errors, listed, counted = [], 0, 1  # counted: this playlist's share of the total (1 until its size is known)
+        for line in proc.stdout:
+            parts = line.rstrip("\n").split("\t", 5)
+            if len(parts) < 6:
+                if line.startswith("ERROR"):
+                    errors.append(re.sub(r"^ERROR:\s*(\[[^]]*\]\s*)?", "", line.strip()))
+                continue
+            count, ptitle, vid, vurl, dur, title = parts
+            listed += 1
+            with lock:
+                if b["status"] != "busy":  # Stop adding
+                    break
+                b.update(total=int(count) if count.isdigit() else None, title="" if ptitle == "NA" else ptitle, listed=listed)
+                want = (min(int(count), MIX_LIMIT) if b["mix"] else int(count)) if count.isdigit() else max(counted, listed)
+                b["expected"] += want - counted  # the total grows as playlists show their size
+                counted = want
+            if title in UNAVAILABLE:
+                with lock:
+                    b["unavailable"] += 1
+                continue
+            if not vurl.startswith("http") and re.fullmatch(r"[\w-]{11}", vid):
+                vurl = f"https://www.youtube.com/watch?v={vid}"
+            if vurl.startswith("http"):
+                yt = YOUTUBE_VIDEO.search(vurl)
+                add(vurl, "" if title == "NA" else title,
+                    {"duration": num(dur), **({"thumb": f"https://i.ytimg.com/vi/{yt[1]}/mqdefault.jpg"} if yt else {})})
+        proc.wait()
+        with lock:
+            batch_procs.pop(bid, None)
+            if b["status"] == "busy":  # it listed fewer than it said (or failed): the total follows (a stop keeps it)
+                b["expected"] -= counted - listed
+                if not listed:
+                    b["errors"].append(f"{url} — {errors[-1] if errors else 'no videos found'}")
+    with lock:
+        if batches[bid]["status"] == "busy":
+            batches[bid]["status"] = "done"
+
+
+def start_batch(urls, audio):
+    with lock:
+        bid = f"b{int(time.time() * 1000)}"
+        batches[bid] = {"id": bid, "status": "busy", "links": len(urls), "at": 0, "link": "", "title": "", "total": None, "listed": 0,
+                        "expected": len(urls), "current": "", "found": 0, "skipped": 0, "unavailable": 0, "errors": [], "audio": audio}
+        for old in sorted(batches, key=lambda k: batches[k]["id"])[:-5]:  # ponytail: keeps the last 5 batches' reports
+            if batches[old]["status"] != "busy":
+                batches.pop(old)
+    threading.Thread(target=expand, args=(bid, urls, audio), daemon=True).start()
+    return bid
+
+
+def stop_batch(bid):
+    """Stop adding: what's in the queue stays."""
+    with lock:
+        if bid in batches and batches[bid]["status"] == "busy":
+            batches[bid]["status"] = "stopped"
+        proc = batch_procs.get(bid)
+    if proc and proc.poll() is None:
+        proc.kill()
 
 
 def stop(key, action):
@@ -196,6 +322,8 @@ def stop(key, action):
         p = procs.get(key)
         if p:
             stops[key] = action
+        elif action == "pause" and downloads.get(key, {}).get("status") == "queued":  # still waiting: it stays out of line
+            downloads[key]["status"] = "paused"
         if action == "cancel":
             downloads.pop(key, None)
     if not p:  # paused, failed or done: nothing running, just the leftovers
@@ -305,8 +433,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/state":
             with lock:  # copies: other threads keep updating these rows
                 state = {"sniffed": [dict(it) for it in sniffed], "jobs": dict(jobs), "out": settings["out"],
-                         "downloads": [dict(d) for d in sorted(downloads.values(), key=lambda d: -d["ts"])],
-                         "extension_dir": str(EXTENSION_DIR)}
+                         "downloads": [dict(d) for d in sorted(downloads.values(), key=lambda d: d["ts"])],  # in the order added
+                         "batches": [dict(b) for b in batches.values()], "limit": DL_LIMIT, "extension_dir": str(EXTENSION_DIR)}
             self.reply(200, state)
         elif self.path.startswith("/thumb/") and (jpg := thumbs.get(self.path[7:])):
             self.reply(200, jpg, "image/jpeg")
@@ -324,9 +452,10 @@ class Handler(BaseHTTPRequestHandler):
             name, size = Path(unquote(self.headers.get("X-Filename", "image.png"))), int(self.headers.get("Content-Length", 0))
             data = self.rfile.read(size) if 0 < size <= 500 * 2 ** 20 else b""
             magic = {"png": data[:4] == b"\x89PNG", "jpg": data[:2] == b"\xff\xd8", "webp": data[8:12] == b"WEBP",
-                     "mtimg": data.startswith(b'{"format":"multitool-image"')}  # a saved project: layers + settings
+                     "mtimg": data.startswith(b'{"format":"multitool-image"'),  # saved projects: image layers + settings,
+                     "mtvid": data.startswith(b'{"format":"multitool-video"')}  # or a video timeline
             if not magic.get(name.suffix[1:].lower()):
-                return self.reply(400, {"ok": False, "error": "not a PNG, JPG, WebP or project"})
+                return self.reply(400, {"ok": False, "error": "not a PNG, JPG, WebP or a project"})
             out = convert.reserve(Path(settings["convert_out"]), name.stem, name.suffix[1:].lower())
             out.write_bytes(data)
             with lock:
@@ -359,6 +488,9 @@ class Handler(BaseHTTPRequestHandler):
             jid, action = str(b.get("id")), self.path[len("/convert/"):]
             if action == "start":
                 return self.reply(200, {"ok": convert.start(jid, str(b.get("target")), settings["convert_out"], b.get("recipe"))})
+            if action == "timeline":  # the video editor's export: many uploaded clips in one file
+                tid = isinstance(b.get("project"), dict) and convert.start_timeline(b["project"], settings["convert_out"], b.get("name") or "timeline")
+                return self.reply(200, {"ok": bool(tid), "id": tid or None})
             if action in ("pause", "resume"):
                 convert.pause(jid, action == "pause")
             elif action == "cancel":
@@ -393,8 +525,18 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 subprocess.Popen(["xdg-open", str(Path(f).parent)])
             return self.reply(200, {"ok": True})
+        if self.path == "/batch/stop":
+            stop_batch(str(b.get("id")))
+            return self.reply(200, {"ok": True})
         urls = [b.get(k) for k in ("url", "page", "media") if b.get(k)]
         links_ok = bool(urls) and all(isinstance(u, str) and urlsplit(u).scheme in ("http", "https") for u in urls)
+        many = b.get("urls")
+        if self.path == "/download" and (many is not None or (links_ok and b.get("url") and is_playlist(b["url"]))):
+            # several links, or a playlist: they go in as a batch (the page shows its progress)
+            many = many if many is not None else [b["url"]]
+            if not (isinstance(many, list) and 0 < len(many) <= 500 and all(isinstance(u, str) and urlsplit(u).scheme in ("http", "https") for u in many)):
+                return self.reply(400, {"ok": False, "error": "need up to 500 http(s) links"})
+            return self.reply(200, {"ok": True, "batch": start_batch(list(dict.fromkeys(many)), bool(b.get("audio")))})
 
         if self.path == "/download":
             base, audio, err, job = str(b.get("key") or b.get("url") or b.get("page") or ""), bool(b.get("audio")), None, None
@@ -412,13 +554,13 @@ class Handler(BaseHTTPRequestHandler):
                             **{k: caught[k] for k in ("thumb", "duration", "size") if caught and k in caught}}
                     else:
                         err = "need an http(s) link"
-                if d and d.get("status") != "busy":  # new, or resume/retry with the stored (freshest) links
-                    d.update(status="busy", msg="")
-                    job = {k: d[k] for k in ("url", "page", "media", "title", "audio")}
+                if d and d.get("status") not in ("busy", "queued"):  # new, or resume / retry: to the front of the line
+                    d.update(status="queued", msg="", queued=0 if d.get("queued") else time.time())
+                    job = True
             if err:
                 return self.reply(400, {"ok": False, "error": err})
             if job:
-                threading.Thread(target=run, args=(job, key), daemon=True).start()
+                pump()
             self.reply(200, {"ok": True})
         elif self.path == "/sniffed":
             page, media = b.get("page"), b.get("media")

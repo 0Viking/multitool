@@ -104,7 +104,7 @@ def probe(path):
                else [(t, IMAGE[t][0]) for t in IMAGE] if kind == "image" else [])
     n, _, d = (v or {}).get("avg_frame_rate", "0/0").partition("/")
     fps = round(num(n) / num(d), 2) if num(n) and num(d) else None
-    return {"kind": kind, "info": " · ".join(words), "targets": targets, "w": w, "h": h, "duration": duration, "fps": fps,
+    return {"kind": kind, "info": " · ".join(words), "targets": targets, "w": w, "h": h, "duration": duration, "fps": fps, "audio": bool(a),
             "_v": v and v["codec_name"], "_a": a and a["codec_name"]}
 
 
@@ -322,6 +322,125 @@ def start(jid, target, folder, recipe=None):
     return True
 
 
+def clean_timeline(p):
+    """The video editor's timeline, checked: clips must be files uploaded to the editor, and only numbers (no text
+    from the page) reach the filter graph. Clips come bottom layer first; each one is its own overlay / sound."""
+    def n(v, lo, hi):
+        x = float(v)
+        if not math.isfinite(x):
+            raise ValueError("bad number")
+        return min(max(x, lo), hi)
+    ev = lambda v, lo, hi: int(n(v, lo, hi)) // 2 * 2  # H.264 wants even sizes
+    w, h = ev(p["w"], 16, 8192), ev(p["h"], 16, 8192)
+    out = {"w": w, "h": h, "fps": n(p.get("fps") or 30, 1, 120), "clips": [], "end": 0.0}
+    if s := p.get("size"):
+        out["size"] = (ev(s["w"], 16, 8192), ev(s["h"], 16, 8192))
+    for c in p["clips"][:300]:
+        with lock:
+            src = jobs.get(str(c["src"]))
+        if not src or src["tool"] != "editor" or src["kind"] not in ("video", "image", "audio") or src["status"] == "error":
+            raise ValueError("unknown file")
+        clip = {"src": src["_src"], "kind": src["kind"], "start": n(c["start"], 0, 36000), "audio": src["audio"] and not c.get("mute")}
+        if src["kind"] == "image":
+            clip.update(cut=0.0, len=n(float(c["out"]) - float(c["in"]), 0.04, 36000), speed=1.0)
+        else:
+            length = src["duration"] or 0
+            cut = n(c["in"], 0, max(length - 0.04, 0))
+            clip.update(cut=cut, len=n(c["out"], cut + 0.04, max(length, cut + 0.04)) - cut, speed=n(c.get("speed") or 1, 0.25, 4))
+        dur = clip["len"] / clip["speed"]  # how long it lasts on the timeline
+        clip.update(dur=dur, vol=n(c.get("volume", 1), 0, 2), op=n(c.get("opacity", 1), 0, 1),
+                    fi=n(c.get("fadeIn") or 0, 0, dur), fo=n(c.get("fadeOut") or 0, 0, dur))
+        if src["kind"] != "audio" and c.get("show", True):  # where the picture sits on the canvas
+            sw, sh = src["w"], src["h"]
+            crop = None
+            if k := c.get("crop"):
+                cx, cy = int(n(k["x"], 0, sw - 2)), int(n(k["y"], 0, sh - 2))
+                crop = (int(n(k["w"], 2, sw - cx)), int(n(k["h"], 2, sh - cy)), cx, cy)
+            turn = n(float(c.get("rot") or 0) % 360, 0, 360)
+            clip["pic"] = (int(n(c["x"], -4 * w, 4 * w)), int(n(c["y"], -4 * h, 4 * h)), ev(c["w"], 2, 4 * max(w, h)),
+                           ev(c["h"], 2, 4 * max(w, h)), turn, bool(c.get("flipH")), bool(c.get("flipV")), crop)
+        out["clips"].append(clip)
+        out["end"] = max(out["end"], clip["start"] + clip["dur"])
+    if not out["clips"]:
+        raise ValueError("empty timeline")
+    return out
+
+
+def tempo(speed):
+    """atempo steps for a speed (each step kept between 0.5× and 2×, where it sounds best)."""
+    steps = []
+    while speed < 0.5:
+        steps.append("atempo=0.5")
+        speed /= 0.5
+    while speed > 2:
+        steps.append("atempo=2")
+        speed /= 2
+    return steps + ([f"atempo={speed:.4f}"] if abs(speed - 1) > 1e-6 else [])
+
+
+def start_timeline(project, folder, name="timeline"):
+    """Queue a timeline export as a job of its own. Returns its id, or None if the timeline doesn't check out."""
+    try:
+        t = clean_timeline(project)
+    except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+        return None
+    jid = uuid.uuid4().hex[:12]
+    stem = sanitize_filename(str(name))[:80] or "timeline"
+    with lock:
+        jobs[jid] = {"id": jid, "name": stem + ".mp4", "ext": "mp4", "size": 0, "ts": time.time(), "tool": "editor",
+                     "kind": "timeline", "targets": [("mp4", "MP4")], "duration": t["end"], "status": "queued", "msg": "",
+                     "target": "mp4", "_src": None, "_timeline": t, "_stem": stem + " (edited)", "_folder": Path(folder),
+                     "_queued": time.time()}
+    pump()
+    return jid
+
+
+def export_timeline(job, target, out):
+    """All the clips in one ffmpeg run: a black canvas, each picture laid on top in order (moved, sized, turned, see-
+    through, sped up or slowed, faded, shown from its start time), all the sound mixed. Returns (ok, error, note)."""
+    t, inputs, graph, sounds, under = job["_timeline"], [], [], [], "base"
+    graph.append(f"color=c=black:s={t['w']}x{t['h']}:r={t['fps']:g}:d={t['end']:.3f}[base]")
+    for i, c in enumerate(t["clips"]):
+        if c["kind"] == "image":
+            inputs += ["-framerate", f"{t['fps']:g}", "-loop", "1", "-t", f"{c['len']:.3f}", "-i", str(c["src"])]
+        else:
+            inputs += ["-ss", f"{c['cut']:.3f}", "-t", f"{c['len']:.3f}", "-i", str(c["src"])]
+        if pic := c.get("pic"):
+            x, y, w, h, turn, fh, fv, crop = pic
+            steps = (["crop={}:{}:{}:{}".format(*crop)] if crop else []) + (["hflip"] if fh else []) + (["vflip"] if fv else [])
+            steps += [f"scale={w}:{h}:flags=lanczos", "format=yuva420p"]
+            if c["op"] < 1:
+                steps.append(f"colorchannelmixer=aa={c['op']:.3f}")
+            if turn:
+                a = f"{math.radians(turn):.6f}"
+                steps.append(f"rotate={a}:ow='ceil(rotw({a})/2)*2':oh='ceil(roth({a})/2)*2':c=none")
+            steps.append(f"setpts=(PTS-STARTPTS)/{c['speed']:g}+{c['start']:.3f}/TB")  # its speed, at its place on the timeline
+            if c["fi"]:
+                steps.append(f"fade=t=in:st={c['start']:.3f}:d={c['fi']:.3f}:alpha=1")
+            if c["fo"]:
+                steps.append(f"fade=t=out:st={c['start'] + c['dur'] - c['fo']:.3f}:d={c['fo']:.3f}:alpha=1")
+            graph.append(f"[{i}:v]{','.join(steps)}[v{i}]")
+            graph.append(f"[{under}][v{i}]overlay=x={x}+{w}/2-overlay_w/2:y={y}+{h}/2-overlay_h/2:eof_action=pass[o{i}]")
+            under = f"o{i}"
+        if c["audio"]:
+            steps = ["asetpts=PTS-STARTPTS", *tempo(c["speed"])] + ([f"volume={c['vol']:.3f}"] if c["vol"] != 1 else [])
+            steps += [f"afade=t=in:st=0:d={c['fi']:.3f}"] if c["fi"] else []
+            steps += [f"afade=t=out:st={c['dur'] - c['fo']:.3f}:d={c['fo']:.3f}"] if c["fo"] else []
+            graph.append(f"[{i}:a]{','.join(steps)},adelay={round(c['start'] * 1000)}:all=1[a{i}]")
+            sounds.append(f"[a{i}]")
+    graph.append(f"[{under}]" + ("scale={}:{}:flags=lanczos".format(*t["size"]) if "size" in t else "null") + "[vout]")
+    if sounds:
+        graph.append(f"{''.join(sounds)}amix=inputs={len(sounds)}:duration=longest:normalize=0[aout]")
+    audio = ["-map", "[aout]", *AAC] if sounds else ["-an"]
+
+    def report(s):
+        done = num(s.get("out_time_us"))
+        progress[job["id"]] = {"done": done / 1e6 if done else 0, "total": t["end"], "speed": s.get("speed")}
+    ok, error = ffmpeg(job, [*inputs, "-filter_complex", ";".join(graph), "-map", "[vout]", *audio, *H264,
+                             "-t", f"{t['end']:.3f}", "-movflags", "+faststart"], out, report)
+    return ok, error, None
+
+
 def pump():
     """Start queued jobs, oldest first, while fewer than LIMIT run (paused ones don't count)."""
     with lock:
@@ -340,7 +459,7 @@ def run(job, target, out):
         if jid not in jobs:  # canceled while it was being started
             out.unlink(missing_ok=True)
             return
-    worker = (convert_text if job["kind"] in ("table", "document")
+    worker = (convert_text if job["kind"] in ("table", "document") else export_timeline if job["kind"] == "timeline"
               else export if job.get("_recipe") is not None else convert_media)
     ok, error, note = worker(job, target, out)
     with lock:
@@ -358,7 +477,7 @@ def run(job, target, out):
             job.update(status="error", msg=error)
     if gone or halt or not ok:
         out.unlink(missing_ok=True)  # never leave a half-written file behind
-    if gone:
+    if gone and job["_src"]:  # (a timeline has no file of its own: its clips stay)
         job["_src"].unlink(missing_ok=True)  # cancel() can't delete it while something is still reading it
     pump()
 
@@ -615,7 +734,7 @@ def cancel(jid):
     if p and p.poll() is None:
         p.kill()  # also ends a frozen one
         p.wait()
-    if job:
+    if job and job["_src"]:
         try:
             job["_src"].unlink(missing_ok=True)
         except OSError:  # still being read: run() deletes it once the job stops

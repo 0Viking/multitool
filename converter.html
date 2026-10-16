@@ -7,18 +7,22 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <a class="back" href="/">← Multitool</a>
-  <h1>Con<span>verter</span></h1>
-  <p class="tag">Video · audio · images · tables · PDF text</p>
+<body class="page">
+  <header class="bar">
+    <a class="back" href="/">← Multitool</a>
+    <strong class="app-name">Con<span>verter</span></strong>
+    <span class="tag">Video · audio · images · tables · PDF text</span>
+    <label class="filebtn"><input type="file" id="files2" multiple>＋ Add files</label>
+    <span class="grow"></span>
+    <span class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></span>
+  </header>
 
-  <label class="drop" id="drop">
+  <main class="pagemain">
+  <label class="drop big" id="drop">
     <input type="file" id="files" multiple>
     <strong>Drop files here</strong>
     <span>or click to choose · several at once for a batch</span>
   </label>
-  <p class="saveto">Save to <span class="out" id="out">…</span> <button type="button" class="pick" id="pick">Change</button></p>
-  <p class="status err" id="status"></p>
 
   <section id="files-section" hidden>
     <h2 class="still">Files</h2>
@@ -30,6 +34,8 @@
     </div>
     <ol id="list"></ol>
   </section>
+  </main>
+  <footer class="status-bar"><p class="status err" id="status"></p></footer>
 
 <script>
   const $ = (s) => document.querySelector(s);
@@ -221,7 +227,7 @@
     drop.classList.remove("over");
     [...e.dataTransfer.files].forEach(upload);
   });
-  $("#files").onchange = (e) => { [...e.target.files].forEach(upload); e.target.value = ""; };
+  $("#files").onchange = $("#files2").onchange = (e) => { [...e.target.files].forEach(upload); e.target.value = ""; };
 
   async function poll() {
     try {
